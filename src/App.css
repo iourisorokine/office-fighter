@@ -1,0 +1,214 @@
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px;
+}
+
+/* the "arcade screen" */
+.cabinet {
+  position: relative;
+  flex: none;
+  box-shadow:
+    0 0 0 4px #10101c,
+    0 0 0 8px #3a3a5c,
+    0 0 40px 10px rgba(80, 90, 200, 0.25);
+  --px: calc(var(--s) * 1px);
+}
+
+.screen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0,
+    rgba(0, 0, 0, 0) calc(var(--px) * 0.5),
+    rgba(0, 0, 0, 0.13) calc(var(--px) * 0.5),
+    rgba(0, 0, 0, 0.13) var(--px)
+  );
+}
+
+/* ---------- overlays ---------- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--px) * 10);
+  font-size: calc(var(--px) * 8);
+  text-align: center;
+}
+
+.overlay.dim,
+.title-overlay {
+  background: rgba(8, 8, 24, 0.62);
+}
+
+.logo {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+  gap: calc(var(--px) * 4);
+}
+
+.logo span {
+  display: block;
+  letter-spacing: calc(var(--px) * 1);
+}
+
+.logo-top {
+  font-size: calc(var(--px) * 16);
+  color: #f4f4ee;
+  text-shadow:
+    calc(var(--px) * 2) calc(var(--px) * 2) 0 #3a7bd5,
+    calc(var(--px) * 4) calc(var(--px) * 4) 0 #10101c;
+}
+
+.logo-bottom {
+  font-size: calc(var(--px) * 32);
+  color: #ffe135;
+  text-shadow:
+    calc(var(--px) * 2) calc(var(--px) * 2) 0 #d62828,
+    calc(var(--px) * 4) calc(var(--px) * 4) 0 #10101c;
+}
+
+.tagline {
+  margin: 0;
+  color: #9fd0f0;
+  font-size: calc(var(--px) * 6);
+}
+
+.build {
+  margin: 0;
+  color: #8888aa;
+  font-size: calc(var(--px) * 5);
+}
+
+.difficulty {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 6);
+}
+
+.diff {
+  min-width: calc(var(--px) * 60);
+}
+.diff-easy {
+  color: #5fe08a;
+}
+.diff-normal {
+  color: #ffe135;
+}
+.diff-hard {
+  color: #ff4a2a;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: calc(var(--px) * 3) calc(var(--px) * 6);
+}
+
+button:focus-visible {
+  outline: calc(var(--px) * 1) solid #ffe135;
+}
+
+.arrow {
+  color: #f4f4ee;
+  padding: calc(var(--px) * 2);
+}
+
+.start {
+  color: #ffffff;
+  font-size: calc(var(--px) * 8);
+}
+
+.blink {
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 6);
+  padding: calc(var(--px) * 12) calc(var(--px) * 16);
+  background: #1b1f3a;
+  box-shadow:
+    0 0 0 calc(var(--px) * 1) #10101c,
+    0 0 0 calc(var(--px) * 3) #e8e0c8,
+    0 0 0 calc(var(--px) * 4) #10101c;
+}
+
+.panel h2 {
+  margin: 0 0 calc(var(--px) * 4);
+  font-size: calc(var(--px) * 10);
+  font-weight: normal;
+  color: #ffe135;
+}
+
+.panel h2.lose {
+  color: #ff4a2a;
+}
+
+.panel .score {
+  margin: 0;
+  font-size: calc(var(--px) * 12);
+}
+
+.panel button:hover {
+  color: #ffe135;
+}
+
+/* ---------- controls legend ---------- */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  max-width: 900px;
+  font-size: 9px;
+  line-height: 1.8;
+  color: #aab0d0;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 2px 4px;
+  margin-right: 3px;
+  font: inherit;
+  color: #10101c;
+  background: #e8e0c8;
+  box-shadow: 0 2px 0 #8a8470;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blink {
+    animation: none;
+  }
+}
