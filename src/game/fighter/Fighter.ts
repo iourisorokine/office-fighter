@@ -1,5 +1,16 @@
 import { GRAVITY, INPUT_BUFFER, STAGE_LEFT, STAGE_RIGHT } from '../constants'
-import { emptyInput, type CharacterDef, type InputSnapshot, type MoveDef, type Palette, type Pose, type Rect } from '../types'
+import {
+  emptyInput,
+  type CharacterDef,
+  type Dir,
+  type HitProps,
+  type InputSnapshot,
+  type MoveDef,
+  type Palette,
+  type Pose,
+  type Rect,
+  type SpawnKind,
+} from '../types'
 
 export type FighterState =
   | 'idle'
@@ -25,15 +36,17 @@ const ACTIONABLE: FighterState[] = ['idle', 'walkF', 'walkB', 'guard', 'crouch',
 const CAN_BLOCK: FighterState[] = [...ACTIONABLE, 'blockstun']
 const INVULNERABLE: FighterState[] = ['knockdown', 'down', 'getup', 'ko', 'win', 'lose']
 
-export type FighterEvent = { type: 'land' | 'dust'; x: number }
-
-const HURT_STAND: Rect = { x0: -11, y0: 0, x1: 12, y1: 68 }
-const HURT_CROUCH: Rect = { x0: -10, y0: 0, x1: 14, y1: 46 }
-const HURT_AIR: Rect = { x0: -11, y0: 6, x1: 11, y1: 64 }
-const HURT_LOW: Rect = { x0: -11, y0: 0, x1: 12, y1: 58 }
+export type FighterEvent =
+  | { type: 'land' | 'dust'; x: number }
+  | { type: 'spawn'; kind: SpawnKind }
+  | { type: 'special'; name: string }
 
 /** A world-space box (x0<x1, y0<y1, y up from the floor). */
 export type WorldRect = Rect
+
+/** How long a sequence may take, and how fresh its last direction must be. */
+const SEQ_WINDOW = 36
+const SEQ_LAST = 16
 
 export class Fighter {
   readonly char: CharacterDef
@@ -55,6 +68,10 @@ export class Fighter {
   stun = 0
   crouchStun = false
   comboCount = 0
+  /** frames left before the special can be used again */
+  specialCd = 0
+  /** frames left showing a complaint stuck on the face */
+  sticker = 0
   input: InputSnapshot = emptyInput()
   events: FighterEvent[] = []
   private jumpDir = 0
@@ -62,15 +79,23 @@ export class Fighter {
   private clock = 0
   private lastLK = -99
   private lastHK = -99
+  private dirHistory: { d: Dir; t: number }[] = []
+  private readonly height: number
 
   constructor(char: CharacterDef, paletteIndex: number) {
     this.char = char
     this.palette = char.palettes[paletteIndex % char.palettes.length]
     this.health = char.stats.health
+    const b = char.body
+    this.height = Math.round((b.thigh + b.shin) * 0.9 + b.torso + b.neck + b.headR * 2 - 1)
   }
 
   get maxHealth() {
     return this.char.stats.health
+  }
+
+  get isSpecial() {
+    return this.state === 'attack' && this.move === this.char.special.move
   }
 
   resetForRound(x: number, facing: 1 | -1) {
@@ -84,7 +109,10 @@ export class Fighter {
     this.move = null
     this.stun = 0
     this.comboCount = 0
+    this.specialCd = 0
+    this.sticker = 0
     this.events = []
+    this.dirHistory = []
     this.lastLK = this.lastHK = -99
     this.setState('idle')
   }
@@ -111,7 +139,7 @@ export class Fighter {
   private threatened(opp: Fighter) {
     return (
       opp.state === 'attack' &&
-      !!opp.move &&
+      !!opp.move?.hitbox &&
       opp.t < opp.move.startup + opp.move.active &&
       Math.abs(opp.x - this.x) < 110
     )
@@ -124,6 +152,8 @@ export class Fighter {
   update(inp: InputSnapshot, opp: Fighter) {
     this.clock++
     this.t++
+    if (this.specialCd > 0) this.specialCd--
+    if (this.sticker > 0) this.sticker--
     this.input = inp
     if (inp.pressed.lk) this.lastLK = this.clock
     if (inp.pressed.hk) this.lastHK = this.clock
@@ -136,6 +166,7 @@ export class Fighter {
       case 'crouch':
       case 'crouchGuard':
         this.faceOpponent(opp)
+        this.recordDirections(inp)
         this.neutral(inp, opp)
         break
       case 'prejump':
@@ -159,6 +190,7 @@ export class Fighter {
         break
       case 'attack': {
         const m = this.move!
+        if (m.spawn && this.t === m.spawn.frame) this.events.push({ type: 'spawn', kind: m.spawn.kind })
         if (this.t >= m.startup + m.active + m.recovery) {
           this.move = null
           this.setState(m.air ? 'jump' : m.crouch ? 'crouch' : 'idle')
@@ -167,6 +199,7 @@ export class Fighter {
       }
       case 'hitstun':
       case 'blockstun':
+        this.recordDirections(inp)
         if (--this.stun <= 0) {
           this.comboCount = 0
           this.setState(this.crouchStun ? 'crouch' : 'idle')
@@ -188,13 +221,44 @@ export class Fighter {
     this.physics()
   }
 
+  /** Remember direction presses (relative to facing) for special-move sequences. */
+  private recordDirections(inp: InputSnapshot) {
+    const p = inp.pressed
+    const push = (d: Dir) => this.dirHistory.push({ d, t: this.clock })
+    if (p.down) push('D')
+    if (p.up) push('U')
+    if (p.right) push(this.facing === 1 ? 'F' : 'B')
+    if (p.left) push(this.facing === 1 ? 'B' : 'F')
+    if (this.dirHistory.length > 8) this.dirHistory.splice(0, this.dirHistory.length - 8)
+  }
+
+  private specialRequested(inp: InputSnapshot) {
+    const sp = this.char.special
+    if (this.specialCd > 0) return false
+    if (inp.special) return true
+    const btn = sp.button === 'lk' ? this.lastLK : this.lastHK
+    if (this.clock - btn > INPUT_BUFFER) return false
+    const h = this.dirHistory
+    if (h.length < sp.seq.length) return false
+    const tail = h.slice(-sp.seq.length)
+    if (!tail.every((e, i) => e.d === sp.seq[i])) return false
+    return this.clock - tail[0].t <= SEQ_WINDOW && this.clock - tail[tail.length - 1].t <= SEQ_LAST
+  }
+
   private neutral(inp: InputSnapshot, opp: Fighter) {
     const fwd = this.facing === 1 ? inp.held.right : inp.held.left
     const back = this.facing === 1 ? inp.held.left : inp.held.right
     const lk = this.clock - this.lastLK <= INPUT_BUFFER
     const hk = this.clock - this.lastHK <= INPUT_BUFFER
-    const { moves, stats } = this.char
+    const { moves, stats, special } = this.char
 
+    if (this.specialRequested(inp)) {
+      this.dirHistory = []
+      this.specialCd = special.cooldown
+      this.startAttack(special.move)
+      this.events.push({ type: 'special', name: special.move.name })
+      return
+    }
     if (lk || hk) {
       const crouch = inp.held.down
       const move = hk ? (crouch ? moves.crouchHK : moves.standHK) : crouch ? moves.crouchLK : moves.standLK
@@ -286,65 +350,76 @@ export class Fighter {
   }
 
   hitboxWorld(): WorldRect | null {
-    if (this.attackPhase() !== 'active' || this.moveHit || !this.move) return null
+    if (this.attackPhase() !== 'active' || this.moveHit || !this.move?.hitbox) return null
     return this.toWorld(this.move.hitbox)
   }
 
   hurtboxesWorld(): WorldRect[] {
     if (INVULNERABLE.includes(this.state)) return []
+    const w = this.char.hurtHalfW
+    const h = this.height
     let body: Rect
-    if (this.airborne) body = HURT_AIR
-    else if (this.isCrouching()) body = HURT_CROUCH
-    else if (this.state === 'prejump' || this.state === 'land') body = HURT_LOW
-    else body = HURT_STAND
+    if (this.airborne) body = { x0: -w, y0: 6, x1: w, y1: h - 4 }
+    else if (this.isCrouching()) body = { x0: -w + 1, y0: 0, x1: w + 2, y1: Math.round(h * 0.68) }
+    else if (this.state === 'prejump' || this.state === 'land') body = { x0: -w, y0: 0, x1: w, y1: h - 10 }
+    else body = { x0: -w, y0: 0, x1: w + 1, y1: h }
     const boxes = [this.toWorld(body)]
     const phase = this.attackPhase()
     if (this.move?.hurtExt && (phase === 'active' || phase === 'recovery')) boxes.push(this.toWorld(this.move.hurtExt))
     return boxes
   }
 
-  canBlock(move: MoveDef, attacker: Fighter): boolean {
+  /** Where the face is (for complaint stickers and effects), world space. */
+  headPos(): [number, number] {
+    return [this.x + this.facing * 4, this.y + this.height - 8]
+  }
+
+  /** Can this fighter block a hit coming from `srcX`? */
+  canBlock(hit: HitProps, srcX: number): boolean {
+    if (hit.level === 'unblockable') return false
     if (this.airborne || !CAN_BLOCK.includes(this.state)) return false
-    const holdingAway = attacker.x > this.x ? this.input.held.left : this.input.held.right
+    const holdingAway = srcX > this.x ? this.input.held.left : this.input.held.right
     if (!holdingAway) return false
     const crouching = this.input.held.down
-    if (move.level === 'low' && !crouching) return false
-    if (move.level === 'overhead' && crouching) return false
+    if (hit.level === 'low' && !crouching) return false
+    if (hit.level === 'overhead' && crouching) return false
     return true
   }
 
-  /** direction pointing away from the attacker */
-  private awayFrom(attacker: Fighter): 1 | -1 {
-    if (this.x === attacker.x) return attacker.facing
-    return this.x > attacker.x ? 1 : -1
+  /** direction pointing away from the hit's source */
+  private awayFrom(srcX: number, srcFacing: 1 | -1): 1 | -1 {
+    if (this.x === srcX) return srcFacing
+    return this.x > srcX ? 1 : -1
   }
 
-  takeHit(move: MoveDef, attacker: Fighter) {
-    const away = this.awayFrom(attacker)
+  takeHit(hit: HitProps, srcX: number, srcFacing: 1 | -1) {
+    const away = this.awayFrom(srcX, srcFacing)
     const wasStunned = this.state === 'hitstun'
-    this.health = Math.max(0, this.health - move.damage)
+    this.health = Math.max(0, this.health - hit.damage)
     this.comboCount = wasStunned ? this.comboCount + 1 : 1
     this.facing = away === 1 ? -1 : 1
     this.move = null
-    if (this.airborne || move.knockdown || this.health <= 0) {
+    if (this.airborne || hit.knockdown || this.health <= 0) {
+      const [lvx, lvy] = hit.launch ?? [1.6, 3.6]
       this.setState('knockdown')
       this.airborne = true
       this.y = Math.max(this.y, 1)
-      this.vy = this.health <= 0 ? 5 : 3.6
-      this.vx = away * (this.health <= 0 ? 2.2 : 1.6)
+      this.vy = this.health <= 0 ? Math.max(lvy, 5) : lvy
+      this.vx = away * (this.health <= 0 ? Math.max(lvx, 2.2) : lvx)
       return
     }
     this.crouchStun = this.isCrouching() || this.input.held.down
-    this.stun = move.hitstun
-    this.vx = away * move.pushHit
+    this.stun = hit.hitstun
+    this.vx = away * hit.pushHit
     this.setState('hitstun')
   }
 
-  block(move: MoveDef, attacker: Fighter) {
-    const away = this.awayFrom(attacker)
+  block(hit: HitProps, srcX: number, srcFacing: 1 | -1) {
+    const away = this.awayFrom(srcX, srcFacing)
+    this.health = Math.max(1, this.health - (hit.chip ?? 0))
     this.crouchStun = this.input.held.down
-    this.stun = move.blockstun
-    this.vx = away * move.pushBlock
+    this.stun = hit.blockstun
+    this.vx = away * hit.pushBlock
     this.move = null
     this.setState('blockstun')
   }
@@ -380,7 +455,7 @@ export class Fighter {
       case 'attack': {
         const m = this.move!
         const phase = this.attackPhase()
-        if (phase === 'startup') return m.poses.startup
+        if (phase === 'startup') return m.loop ? m.loop[Math.floor(this.t / 4) % m.loop.length] : m.poses.startup
         if (phase === 'active') return m.poses.active
         const rt = this.t - m.startup - m.active
         if (rt < m.recovery * 0.6) return m.poses.recover

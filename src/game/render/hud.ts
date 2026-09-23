@@ -47,6 +47,26 @@ export function drawHud(ctx: CanvasRenderingContext2D, m: Match, frame: number) 
   drawText(ctx, m.names[0], leftX, BAR_Y + BAR_H + 4, { color: '#ffffff', shadow: '#10101c' })
   drawText(ctx, m.names[1], rightX + BAR_W, BAR_Y + BAR_H + 4, { color: '#ffffff', shadow: '#10101c', align: 'right' })
 
+  // special move readiness: a small gauge that fills while it recharges
+  m.fighters.forEach((f, i) => {
+    const cd = f.char.special.cooldown
+    const ready = f.specialCd === 0
+    const w = 40
+    const x = i === 0 ? leftX : rightX + BAR_W - w
+    const y = BAR_Y + BAR_H + 14
+    rect(ctx, x - 1, y - 1, w + 2, 5, '#10101c')
+    rect(ctx, x, y, w, 3, '#2a2a4a')
+    const fill = Math.max(0, Math.min(w, Math.round(w * (1 - f.specialCd / cd))))
+    rect(ctx, i === 0 ? x : x + w - fill, y, fill, 3, ready ? (blink ? '#5fe08a' : '#b8ffcc') : '#3a7bd5')
+    if (ready) {
+      drawText(ctx, 'SPECIAL', i === 0 ? x + w + 4 : x - 4, y - 2, {
+        color: blink ? '#5fe08a' : '#ffffff',
+        shadow: '#10101c',
+        align: i === 0 ? 'left' : 'right',
+      })
+    }
+  })
+
   // round wins = cups of coffee
   for (let i = 0; i < 2; i++) {
     drawMug(ctx, leftX + BAR_W - 20 + i * 11, BAR_Y + BAR_H + 3, m.wins[0] > i)

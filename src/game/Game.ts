@@ -1,5 +1,5 @@
 import type { Difficulty } from './ai/CpuController'
-import { intern } from './characters/intern'
+import { ROSTER, characterById } from './characters'
 import { FLOOR_Y, VIEW_H, VIEW_W } from './constants'
 import type { Fighter } from './fighter/Fighter'
 import { KeyboardInput } from './input'
@@ -8,7 +8,17 @@ import { Match, type MatchResult } from './Match'
 import { drawEffects, drawShadow } from './render/effects'
 import { drawAnnouncer, drawHud } from './render/hud'
 import { SPR_OX, SPR_OY, spriteFor } from './render/puppet'
-import { createStage, drawLights } from './render/stage'
+import { drawIncidentOverlay, drawProjectiles, drawSticker } from './render/specialsFx'
+import { STAGES, stageById, stageCanvas } from './render/stages'
+
+export interface MatchSetup {
+  p1: string
+  cpu: string
+  stageId: string
+  difficulty: Difficulty
+}
+
+const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
 
 export interface GameCallbacks {
   onPauseChange?: (paused: boolean) => void
@@ -23,7 +33,6 @@ export class Game {
   private readonly ctx: CanvasRenderingContext2D
   private readonly keyboard = new KeyboardInput()
   private readonly loop: FixedLoop
-  private readonly stage = createStage()
   private readonly cb: GameCallbacks
   private match: Match | null = null
   private paused = false
@@ -45,25 +54,29 @@ export class Game {
     this.loop.start()
   }
 
-  /** CPU vs CPU demo running behind the title screen. */
+  /** CPU vs CPU demo running behind the title and select screens. */
   startAttract() {
     this.paused = false
+    const a = pick(ROSTER)
+    const b = pick(ROSTER.filter((c) => c !== a))
     this.match = new Match({
       mode: 'attract',
       difficulty: 'hard',
-      chars: [intern, intern],
+      chars: [a, b],
+      stageId: pick(STAGES).id,
       keyboard: this.keyboard,
       onEnd: () => this.startAttract(),
     })
   }
 
-  startMatch(difficulty: Difficulty) {
+  startMatch(setup: MatchSetup) {
     this.paused = false
     this.keyboard.clear()
     this.match = new Match({
       mode: 'cpu',
-      difficulty,
-      chars: [intern, intern],
+      difficulty: setup.difficulty,
+      chars: [characterById(setup.p1), characterById(setup.cpu)],
+      stageId: setup.stageId,
       keyboard: this.keyboard,
       onEnd: (r) => this.cb.onMatchEnd?.(r),
     })
@@ -110,15 +123,21 @@ export class Game {
       const amp = m.shake > 8 ? 2 : 1
       ctx.translate(((this.frame % 2) * 2 - 1) * amp, ((this.frame >> 1) % 2) * amp)
     }
-    ctx.drawImage(this.stage, 0, 0)
-    drawLights(ctx, this.frame)
+    const stageId = m?.stageId ?? STAGES[0].id
+    ctx.drawImage(stageCanvas(stageId), 0, 0)
+    stageById(stageId).ambient(ctx, this.frame)
     if (m) {
       for (const f of m.fighters) drawShadow(ctx, f.x, f.y)
       // the attacker is drawn on top so the kick is always visible
       const [a, b] = m.fighters
       const order = b.state === 'attack' && a.state !== 'attack' ? [a, b] : [b, a]
-      for (const f of order) this.drawFighter(f, m)
+      for (const f of order) {
+        this.drawFighter(f, m)
+        drawSticker(ctx, f)
+      }
+      drawProjectiles(ctx, m.projectiles)
       drawEffects(ctx, m.effects)
+      if (m.incident) drawIncidentOverlay(ctx, m.incident)
       if (this.showBoxes) this.drawBoxes(m)
     }
     ctx.restore()
@@ -130,7 +149,7 @@ export class Game {
 
   private drawFighter(f: Fighter, m: Match) {
     const ctx = this.ctx
-    const sprite = spriteFor(f.getPose(), f.char.body, f.palette, f.char.id)
+    const sprite = spriteFor(f.getPose(), f.char.body, f.char.look, f.palette, f.char.id)
     let sx = Math.round(f.x)
     if (m.hitstop > 0 && m.victim === f) sx += this.frame % 4 < 2 ? 1 : -1
     const sy = Math.round(FLOOR_Y - f.y) - SPR_OY
@@ -155,5 +174,7 @@ export class Game {
         ctx.strokeRect(hb.x0 + 0.5, FLOOR_Y - hb.y1 + 0.5, hb.x1 - hb.x0, hb.y1 - hb.y0)
       }
     }
+    ctx.strokeStyle = '#ffae1e'
+    for (const p of m.projectiles) ctx.strokeRect(p.x - p.w / 2 + 0.5, FLOOR_Y - p.y - p.h / 2 + 0.5, p.w, p.h)
   }
 }

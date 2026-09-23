@@ -1,244 +1,99 @@
 import { defaultPoses } from '../fighter/poses'
-import type { CharacterDef, MoveSet, Palette, Pose } from '../types'
+import type { CharacterDef, MoveDef, Palette } from '../types'
+import { baseMoves } from './common'
 
-/**
- * THE INTERN — the generic placeholder fighter for phase 1.
- * The five office archetypes (HR lady, executive, accountant, sales rep,
- * developer) will each be a CharacterDef like this one, with their own
- * body proportions, palettes, stats, poses and moves.
- */
+/** THE INTERN — unpaid, over-caffeinated, all kicks. The balanced all-rounder. */
 
-const guard = { nearArm: { ik: [7, 47] as [number, number] }, farArm: { ik: [13, 45] as [number, number] } }
-const crouchArms = { nearArm: { ik: [14, 33] as [number, number] }, farArm: { ik: [19, 30] as [number, number] } }
-const airArms = { nearArm: { a: [60, 150] as [number, number] }, farArm: { a: [85, 125] as [number, number] } }
-
-// --- standing light kick: quick front kick with the rear leg -----------------
-const lkChamber: Pose = { hip: [1, 27], lean: -4, farLeg: { ik: [5, 2] }, nearLeg: { a: [65, -15] }, ...guard }
-const lkExtend: Pose = {
-  hip: [2, 27],
-  lean: -10,
-  face: 'shout',
-  farLeg: { ik: [4, 2] },
-  nearLeg: { a: [80, 85] },
-  ...guard,
-}
-
-// --- standing heavy kick: big roundhouse at chest/head height ---------------
-const hkChamber: Pose = {
-  hip: [0, 28],
-  lean: -12,
-  farLeg: { ik: [3, 2] },
-  nearLeg: { a: [100, 10] },
-  nearArm: { ik: [4, 46] },
-  farArm: { ik: [14, 48] },
-}
-const hkExtend: Pose = {
-  hip: [3, 28],
-  lean: -28,
-  head: 14,
-  face: 'shout',
-  farLeg: { ik: [2, 2] },
-  nearLeg: { a: [112, 118] },
-  nearArm: { a: [-40, -20] },
-  farArm: { a: [60, 120] },
-}
-
-// --- crouching light kick: low shin poke -------------------------------------
-const clkChamber: Pose = { hip: [0, 15], lean: 18, farLeg: { ik: [-4, 2] }, nearLeg: { a: [60, 30] }, ...crouchArms }
-const clkExtend: Pose = {
-  hip: [2, 14],
-  lean: 15,
-  face: 'shout',
-  farLeg: { ik: [-4, 2] },
-  nearLeg: { a: [72, 86] },
-  ...crouchArms,
-}
-
-// --- crouching heavy kick: the sweep ("the coffee-spill sweep") --------------
-const sweepChamber: Pose = {
-  hip: [-2, 13],
-  lean: 30,
-  farLeg: { ik: [-6, 2] },
-  nearLeg: { a: [40, 20] },
-  nearArm: { ik: [8, 20] },
-  farArm: { ik: [12, 3] },
-}
-const sweepExtend: Pose = {
-  hip: [0, 10],
-  lean: 40,
-  face: 'shout',
-  farLeg: { ik: [-7, 2] },
-  nearLeg: { a: [83, 88] },
-  nearArm: { ik: [6, 18] },
-  farArm: { ik: [13, 2] },
-}
-
-// --- air kicks ---------------------------------------------------------------
-const airTuck: Pose = { hip: [0, 32], lean: 8, nearLeg: { a: [80, -10] }, farLeg: { a: [88, -25] }, ...airArms }
-const airLKPose: Pose = {
-  hip: [0, 30],
-  lean: 12,
-  face: 'shout',
-  nearLeg: { a: [55, 55] },
-  farLeg: { a: [85, -20] },
-  ...airArms,
-}
-const airHKPose: Pose = {
-  hip: [0, 30],
-  lean: -15,
-  face: 'shout',
-  nearLeg: { a: [75, 80] },
-  farLeg: { a: [80, -20] },
-  nearArm: { a: [-60, -30] },
-  farArm: { a: [70, 140] },
-}
-
-const moves: MoveSet = {
-  standLK: {
-    id: 'standLK',
-    name: 'Memo Poke',
-    startup: 4,
-    active: 3,
-    recovery: 9,
-    damage: 6,
-    hitstun: 14,
-    blockstun: 10,
-    pushHit: 2.5,
-    pushBlock: 3,
-    hitstop: 7,
-    level: 'mid',
-    hitbox: { x0: 18, y0: 16, x1: 36, y1: 30 },
-    hurtExt: { x0: 12, y0: 18, x1: 32, y1: 28 },
-    poses: { startup: lkChamber, active: lkExtend, recover: lkChamber },
+const coffeeSplash: MoveDef = {
+  id: 'coffeeSplash',
+  name: 'Coffee Splash',
+  startup: 10,
+  active: 8,
+  recovery: 18,
+  damage: 0,
+  hitstun: 0,
+  blockstun: 0,
+  pushHit: 0,
+  pushBlock: 0,
+  hitstop: 0,
+  level: 'mid',
+  spawn: { frame: 10, kind: 'coffee' },
+  poses: {
+    startup: {
+      hip: [-1, 27],
+      lean: -8,
+      nearLeg: { ik: [-9, 2] },
+      farLeg: { ik: [8, 2] },
+      nearArm: { a: [-70, -30] },
+      farArm: { ik: [14, 44] },
+    },
+    active: {
+      hip: [2, 26],
+      lean: 14,
+      face: 'shout',
+      nearLeg: { ik: [-10, 2] },
+      farLeg: { ik: [10, 2] },
+      nearArm: { a: [100, 95] },
+      farArm: { a: [-30, -10] },
+    },
+    recover: {
+      hip: [1, 26],
+      lean: 10,
+      nearLeg: { ik: [-9, 2] },
+      farLeg: { ik: [9, 2] },
+      nearArm: { a: [80, 60] },
+      farArm: { ik: [12, 42] },
+    },
   },
-  standHK: {
-    id: 'standHK',
-    name: 'Performance Review',
-    startup: 8,
-    active: 4,
-    recovery: 18,
-    damage: 13,
-    hitstun: 20,
-    blockstun: 15,
-    pushHit: 4,
-    pushBlock: 4,
-    hitstop: 11,
-    heavy: true,
-    level: 'mid',
-    hitbox: { x0: 19, y0: 33, x1: 38, y1: 50 },
-    hurtExt: { x0: 12, y0: 32, x1: 34, y1: 46 },
-    poses: { startup: hkChamber, active: hkExtend, recover: hkChamber },
-  },
-  crouchLK: {
-    id: 'crouchLK',
-    name: 'Shin Memo',
-    startup: 4,
-    active: 2,
-    recovery: 8,
-    damage: 5,
-    hitstun: 13,
-    blockstun: 9,
-    pushHit: 2,
-    pushBlock: 2.5,
-    hitstop: 6,
-    level: 'low',
-    crouch: true,
-    hitbox: { x0: 18, y0: 1, x1: 35, y1: 13 },
-    hurtExt: { x0: 12, y0: 2, x1: 30, y1: 12 },
-    poses: { startup: clkChamber, active: clkExtend, recover: clkChamber },
-  },
-  crouchHK: {
-    id: 'crouchHK',
-    name: 'Coffee-Spill Sweep',
-    startup: 7,
-    active: 5,
-    recovery: 20,
-    damage: 12,
-    hitstun: 20,
-    blockstun: 14,
-    pushHit: 2,
-    pushBlock: 3,
-    hitstop: 10,
-    heavy: true,
-    knockdown: true,
-    level: 'low',
-    crouch: true,
-    hitbox: { x0: 16, y0: 0, x1: 36, y1: 11 },
-    hurtExt: { x0: 10, y0: 0, x1: 32, y1: 10 },
-    poses: { startup: sweepChamber, active: sweepExtend, recover: sweepChamber },
-  },
-  airLK: {
-    id: 'airLK',
-    name: 'Flying Memo',
-    startup: 4,
-    active: 10,
-    recovery: 6,
-    damage: 7,
-    hitstun: 14,
-    blockstun: 10,
-    pushHit: 2,
-    pushBlock: 2.5,
-    hitstop: 7,
-    level: 'overhead',
-    air: true,
-    hitbox: { x0: 12, y0: 6, x1: 30, y1: 24 },
-    poses: { startup: airTuck, active: airLKPose, recover: airLKPose },
-  },
-  airHK: {
-    id: 'airHK',
-    name: 'Flying Deadline',
-    startup: 6,
-    active: 7,
-    recovery: 10,
-    damage: 11,
-    hitstun: 18,
-    blockstun: 13,
-    pushHit: 3,
-    pushBlock: 3,
-    hitstop: 10,
-    heavy: true,
-    level: 'overhead',
-    air: true,
-    hitbox: { x0: 16, y0: 15, x1: 35, y1: 32 },
-    poses: { startup: airTuck, active: airHKPose, recover: airHKPose },
-  },
+}
+
+const base = {
+  outline: '#1a1020',
+  eye: '#ffffff',
+  accent: '#1a1020',
+  prop: '#444444',
+  propShade: '#222222',
+  propB: '#dddddd',
+  propDark: '#111111',
 }
 
 const palettes: Palette[] = [
   {
+    ...base,
     id: 'intern-a',
-    outline: '#1a1020',
     skin: '#f2c089',
     skinShade: '#c98a55',
     hair: '#3a2418',
     hairShade: '#22140c',
-    shirt: '#f4f4ee',
-    shirtShade: '#a9b1c4',
-    pants: '#4a4f5e',
-    pantsShade: '#2e3140',
+    top: '#f4f4ee',
+    topShade: '#a9b1c4',
+    jacket: '#f4f4ee',
+    jacketShade: '#a9b1c4',
+    legs: '#4a4f5e',
+    legsShade: '#2e3140',
     shoe: '#1e1a1a',
     shoeShine: '#5a5252',
     tie: '#d62828',
     tieShade: '#8e1616',
-    eye: '#ffffff',
     belt: '#2a1a12',
   },
   {
+    ...base,
     id: 'intern-b',
-    outline: '#1a1020',
     skin: '#c68a5a',
     skinShade: '#8e5a34',
     hair: '#101014',
     hairShade: '#000000',
-    shirt: '#9fd0f0',
-    shirtShade: '#5f89b8',
-    pants: '#6b4a2e',
-    pantsShade: '#46301c',
+    top: '#9fd0f0',
+    topShade: '#5f89b8',
+    jacket: '#9fd0f0',
+    jacketShade: '#5f89b8',
+    legs: '#6b4a2e',
+    legsShade: '#46301c',
     shoe: '#3a2212',
     shoeShine: '#7a5236',
     tie: '#1f3b8c',
     tieShade: '#0f1f52',
-    eye: '#ffffff',
     belt: '#1a120c',
   },
 ]
@@ -247,7 +102,8 @@ export const intern: CharacterDef = {
   id: 'intern',
   name: 'INTERN',
   title: 'The Unpaid Intern',
-  stats: { health: 100, walkF: 1.7, walkB: 1.3, jumpV: 5.4, jumpVX: 1.9 },
+  bio: 'Runs on free coffee and hope. Quick kicks, no fear, no salary.',
+  stats: { health: 105, power: 3, walkF: 1.7, walkB: 1.3, jumpV: 5.4, jumpVX: 1.9 },
   body: {
     thigh: 15,
     shin: 15,
@@ -263,7 +119,30 @@ export const intern: CharacterDef = {
     armW: 6,
     foreW: 5,
   },
+  look: {
+    hair: 'short',
+    top: 'shirt',
+    tie: true,
+    skirt: false,
+    belly: 0,
+    shoes: 'flat',
+    glasses: false,
+    beard: false,
+    lipstick: false,
+    grin: false,
+    logo: false,
+    prop: 'none',
+  },
+  hurtHalfW: 12,
   palettes,
   poses: defaultPoses,
-  moves,
+  moves: baseMoves,
+  special: {
+    move: coffeeSplash,
+    seq: ['D', 'F'],
+    button: 'lk',
+    cooldown: 70,
+    label: '↓ → X',
+    description: 'Throws a scalding cup of office coffee.',
+  },
 }

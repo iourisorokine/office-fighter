@@ -25,7 +25,7 @@ export function TitleOverlay(props: {
       <button className="start blink" onClick={props.onStart}>
         PRESS ENTER
       </button>
-      <p className="build">PHASE 1 · THE INTERN VS THE TEMP</p>
+      <p className="build">4 EMPLOYEES · 4 ROOMS · 1 PROMOTION</p>
     </div>
   )
 }
@@ -42,7 +42,12 @@ export function PauseOverlay(props: { onResume: () => void; onQuit: () => void }
   )
 }
 
-export function ResultOverlay(props: { result: MatchResult; onRematch: () => void; onQuit: () => void }) {
+export function ResultOverlay(props: {
+  result: MatchResult
+  onRematch: () => void
+  onChange: () => void
+  onQuit: () => void
+}) {
   const { winner, wins } = props.result
   const title = winner === 0 ? 'YOU GOT PROMOTED' : winner === 1 ? 'YOU GOT LAID OFF' : 'NOBODY WINS'
   return (
@@ -53,13 +58,14 @@ export function ResultOverlay(props: { result: MatchResult; onRematch: () => voi
           {wins[0]} - {wins[1]}
         </p>
         <button onClick={props.onRematch}>REMATCH · ENTER</button>
+        <button onClick={props.onChange}>CHANGE FIGHTER · S</button>
         <button onClick={props.onQuit}>TITLE · ESC</button>
       </div>
     </div>
   )
 }
 
-export function ControlsBar() {
+export function ControlsBar(props: { special: { name: string; label: string } | null }) {
   return (
     <div className="controls">
       <span>
@@ -73,11 +79,16 @@ export function ControlsBar() {
         <kbd>↓</kbd> CROUCH
       </span>
       <span>
-        <kbd>X</kbd> LIGHT KICK
+        <kbd>X</kbd> LIGHT
       </span>
       <span>
-        <kbd>C</kbd> HEAVY KICK
+        <kbd>C</kbd> HEAVY
       </span>
+      {props.special && (
+        <span className="special-hint">
+          <kbd>{props.special.label}</kbd> {props.special.name.toUpperCase()}
+        </span>
+      )}
       <span>HOLD BACK = BLOCK</span>
       <span>
         <kbd>ESC</kbd> PAUSE

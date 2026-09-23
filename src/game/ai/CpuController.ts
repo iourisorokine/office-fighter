@@ -1,4 +1,5 @@
 import type { Fighter } from '../fighter/Fighter'
+import type { ArenaView } from '../Match'
 import { noButtons, type Buttons, type InputSnapshot } from '../types'
 
 export type Difficulty = 'easy' | 'normal' | 'hard'
@@ -22,7 +23,7 @@ const PARAMS: Record<Difficulty, Params> = {
   hard: { block: 0.82, lowRead: 0.85, aggression: 0.72, antiAir: 0.75, think: [5, 12] },
 }
 
-type PlanKind = 'approach' | 'retreat' | 'wait' | 'crouch' | 'guard' | 'jumpIn' | 'jumpBack' | 'attack'
+type PlanKind = 'approach' | 'retreat' | 'wait' | 'crouch' | 'guard' | 'jumpIn' | 'jumpBack' | 'attack' | 'special'
 type AttackKind = 'lk' | 'hk' | 'clk' | 'chk'
 
 interface Plan {
@@ -48,22 +49,71 @@ export class CpuController {
   private blockLow = false
   private seenJump = false
   private willAntiAir = false
+  private seenProjectile = -1
+  private dodgeProjectile: 'jump' | 'block' | 'none' = 'none'
+  private seenIncident = false
+  private dodgeIncident = false
 
-  constructor(difficulty: Difficulty) {
+  /** which player this CPU controls (to tell its own projectiles from the opponent's) */
+  private readonly side: 0 | 1
+
+  constructor(difficulty: Difficulty, side: 0 | 1) {
     this.p = PARAMS[difficulty]
+    this.side = side
   }
 
-  poll(self: Fighter, opp: Fighter): InputSnapshot {
+  poll(self: Fighter, opp: Fighter, arena: ArenaView): InputSnapshot {
     const held = noButtons()
     const pressed = noButtons()
     const toward: 'left' | 'right' = opp.x >= self.x ? 'right' : 'left'
     const away: 'left' | 'right' = toward === 'right' ? 'left' : 'right'
     const dist = Math.abs(opp.x - self.x)
 
+    let special = false
     const finish = (): InputSnapshot => {
       for (const k of ['up', 'lk', 'hk'] as const) if (held[k] && !this.prevHeld[k]) pressed[k] = true
       this.prevHeld = held
-      return { held, pressed }
+      return { held, pressed, special }
+    }
+
+    // --- dodge the opponent's incident by jumping ---------------------------
+    const inc = arena.incident
+    if (inc && !inc.fired && inc.owner !== this.side) {
+      if (!this.seenIncident) {
+        this.seenIncident = true
+        this.dodgeIncident = chance(this.p.block)
+      }
+      // or punish the typing developer if close enough
+      if (dist < 45 && self.isActionable()) {
+        held.hk = true
+        return finish()
+      }
+      if (this.dodgeIncident && inc.t > 30 && self.isActionable()) {
+        held.up = true
+        return finish()
+      }
+    } else this.seenIncident = false
+
+    // --- incoming projectile: jump over it or block -------------------------
+    const threat = arena.projectiles.find(
+      (p) => Math.sign(p.vx) === Math.sign(self.x - p.x) && Math.abs(p.x - self.x) < 110 && p.owner !== this.side,
+    )
+    if (threat) {
+      if (threat.id !== this.seenProjectile) {
+        this.seenProjectile = threat.id
+        const r = Math.random()
+        this.dodgeProjectile = r < this.p.antiAir * 0.8 && threat.kind !== 'bullshit' ? 'jump' : r < this.p.block + 0.1 ? 'block' : 'none'
+      }
+      const gap = Math.abs(threat.x - self.x)
+      if (this.dodgeProjectile === 'jump' && gap < 60 && self.isActionable()) {
+        held.up = true
+        held[toward] = true
+        return finish()
+      }
+      if (this.dodgeProjectile === 'block' && gap < 80) {
+        held[away] = true
+        return finish()
+      }
     }
 
     // --- react to a fresh attack -------------------------------------------
@@ -105,7 +155,7 @@ export class CpuController {
     }
 
     // --- follow the current plan --------------------------------------------
-    if (this.plan.frames <= 0 || (this.plan.kind === 'approach' && dist < 34)) this.plan = this.choosePlan(dist)
+    if (this.plan.frames <= 0 || (this.plan.kind === 'approach' && dist < 34)) this.plan = this.choosePlan(dist, self, opp)
     const plan = this.plan
     plan.frames--
     switch (plan.kind) {
@@ -139,6 +189,12 @@ export class CpuController {
         plan.attack = undefined // press once, then just wait out the recovery
         if (self.state === 'attack' && self.move?.crouch) held.down = true
         break
+      case 'special':
+        if (plan.attack !== undefined) {
+          special = true
+          plan.attack = undefined
+        }
+        break
       case 'wait':
         break
     }
@@ -147,9 +203,26 @@ export class CpuController {
     return finish()
   }
 
-  private choosePlan(dist: number): Plan {
+  private choosePlan(dist: number, self: Fighter, opp: Fighter): Plan {
     const [t0, t1] = this.p.think
     const a = this.p.aggression
+    // specials: each character has a range where theirs makes sense
+    if (self.specialCd === 0) {
+      const kind = self.char.special.move.spawn?.kind
+      const odds =
+        kind === 'incident'
+          ? dist > 70 && !opp.airborne
+            ? 0.3
+            : 0
+          : kind === 'bullshit'
+            ? dist > 40 && dist < 230
+              ? 0.25
+              : 0
+            : dist > 90
+              ? 0.35
+              : 0
+      if (chance(odds * (0.5 + a))) return { kind: 'special', frames: 30, attack: 'lk' }
+    }
     if (dist > 110) {
       if (chance(0.12 * a)) return { kind: 'jumpIn', frames: 45 }
       return chance(0.85) ? { kind: 'approach', frames: rand(20, 50) } : { kind: 'wait', frames: rand(t0, t1) }

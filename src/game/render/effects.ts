@@ -1,6 +1,7 @@
 import { FLOOR_Y } from '../constants'
+import { drawText } from './font'
 
-export type EffectKind = 'hit' | 'heavy' | 'block' | 'dust'
+export type EffectKind = 'hit' | 'heavy' | 'block' | 'dust' | 'splash' | 'paper' | 'text'
 
 interface Particle {
   x: number
@@ -17,17 +18,25 @@ export interface Effect {
   t: number
   dur: number
   parts: Particle[]
+  text?: string
+  color?: string
+}
+
+/** Floating text ("COMPLAINT FILED!", special move names...). */
+export function spawnText(text: string, x: number, y: number, color = '#ffe135', dur = 55): Effect {
+  return { kind: 'text', x, y, t: 0, dur, parts: [], text, color }
 }
 
 export function spawnEffect(kind: EffectKind, x: number, y: number): Effect {
-  const n = kind === 'heavy' ? 10 : kind === 'hit' ? 6 : kind === 'dust' ? 5 : 4
+  const n = kind === 'heavy' ? 10 : kind === 'hit' ? 6 : kind === 'dust' ? 5 : kind === 'splash' || kind === 'paper' ? 12 : 4
   const parts: Particle[] = []
   for (let i = 0; i < n; i++) {
     const a = kind === 'dust' ? Math.PI * (0.1 + 0.8 * (i / (n - 1))) : Math.random() * Math.PI * 2
     const sp = kind === 'dust' ? 0.6 : 1.5 + Math.random() * 2
     parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp })
   }
-  return { kind, x, y, t: 0, dur: kind === 'dust' ? 18 : kind === 'heavy' ? 16 : 12, parts }
+  const dur = kind === 'dust' ? 18 : kind === 'heavy' ? 16 : kind === 'splash' || kind === 'paper' ? 26 : 12
+  return { kind, x, y, t: 0, dur, parts }
 }
 
 export function updateEffects(list: Effect[]): Effect[] {
@@ -37,7 +46,10 @@ export function updateEffects(list: Effect[]): Effect[] {
       p.x += p.vx
       p.y += p.vy
       if (e.kind === 'dust') p.vy *= 0.9
-      else p.vy -= 0.15
+      else if (e.kind === 'paper') {
+        p.vy -= 0.05
+        p.vx *= 0.95
+      } else p.vy -= 0.15
     }
   }
   return list.filter((e) => e.t < e.dur)
@@ -52,6 +64,20 @@ export function drawEffects(ctx: CanvasRenderingContext2D, list: Effect[]) {
   for (const e of list) {
     const sx = Math.round(e.x)
     const sy = Math.round(FLOOR_Y - e.y)
+    if (e.kind === 'text') {
+      const rise = Math.min(e.t, 20) * 0.6
+      if (e.t < e.dur - 10 || e.t % 4 < 2)
+        drawText(ctx, e.text ?? '', sx, Math.round(sy - rise), { color: e.color, outline: '#10101c', align: 'center' })
+      continue
+    }
+    if (e.kind === 'splash' || e.kind === 'paper') {
+      for (const [i, p] of e.parts.entries()) {
+        const c = e.kind === 'splash' ? (i % 3 ? '#6b3a1e' : '#c89060') : i % 2 ? '#ffffff' : '#d8d8e0'
+        px(ctx, p.x, FLOOR_Y - p.y, e.kind === 'paper' ? 3 : 2, c)
+        if (e.kind === 'paper') px(ctx, p.x, FLOOR_Y - p.y + 1, 1, '#8a8aa0')
+      }
+      continue
+    }
     if (e.kind === 'dust') {
       for (const p of e.parts) {
         const s = e.t < 8 ? 3 : 2
