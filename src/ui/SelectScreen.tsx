@@ -147,6 +147,7 @@ export function SelectScreen(props: { initial?: SelectResult | null; onDone: (r:
       <p className="vs-line">
         {chosen.name} <span>VS</span> {cpuChar.name} (CPU)
       </p>
+      <p className="bio">A NEW OPPONENT STEPS IN EVERY ROUND</p>
       <p className="hint">← → ROOM · ENTER FIGHT · ESC BACK</p>
     </div>
   )

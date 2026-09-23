@@ -21,6 +21,12 @@ Other scripts:
 Dev tool: with `npm run dev` running, open **/sprites.html** to see every pose of every
 character side by side (useful when tuning poses).
 
+## Deploy (GitHub Pages)
+
+`.github/workflows/deploy.yml` builds and publishes the game on every push to `main`.
+One-time setup in the repo: **Settings → Pages → Source: GitHub Actions**.
+The build uses relative paths, so it works under `https://<user>.github.io/<repo>/`.
+
 ## Controls (player 1)
 
 | key               | action                                        |
@@ -47,6 +53,7 @@ Directions in special moves are relative to where you face (→ = forward).
 | INTERN    | none, just kicks  | **Coffee Splash** `↓ → X`: throws a hot coffee | all-rounder |
 
 Each special recharges (gauge under the health bar, "SPECIAL" when ready).
+A new, random opponent steps in at every round.
 
 ## The rooms
 

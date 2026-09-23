@@ -59,6 +59,8 @@ export interface MatchConfig {
   mode: MatchMode
   difficulty: Difficulty
   chars: [CharacterDef, CharacterDef]
+  /** if set, player 2 becomes a random different character every new round */
+  rotatePool?: CharacterDef[]
   stageId: string
   keyboard: KeyboardInput
   onEnd?: (r: MatchResult) => void
@@ -78,6 +80,8 @@ export class Match implements ArenaView {
   readonly stageId: string
   private readonly controllers: [Controller, Controller]
   private readonly onEnd?: (r: MatchResult) => void
+  private readonly rotatePool: CharacterDef[]
+  private readonly difficulty: Difficulty
 
   phase: Phase = 'intro'
   phaseT = 0
@@ -104,6 +108,8 @@ export class Match implements ArenaView {
     this.mode = cfg.mode
     this.stageId = cfg.stageId
     this.onEnd = cfg.onEnd
+    this.rotatePool = cfg.rotatePool ?? []
+    this.difficulty = cfg.mode === 'attract' ? 'hard' : cfg.difficulty
     const [c1, c2] = cfg.chars
     this.fighters = [new Fighter(c1, 0), new Fighter(c2, c1.id === c2.id ? 1 : 0)]
     if (cfg.mode === 'attract') {
@@ -114,6 +120,17 @@ export class Match implements ArenaView {
       this.names = [c1.name, `${c2.name} CPU`]
     }
     this.startRound()
+  }
+
+  /** New round, new opponent: pick someone who is neither player 1 nor the last opponent. */
+  private rotateOpponent() {
+    const [p1, old] = this.fighters
+    const pool = this.rotatePool.filter((c) => c.id !== p1.char.id && c.id !== old.char.id)
+    if (pool.length === 0) return
+    const next = pool[Math.floor(Math.random() * pool.length)]
+    this.fighters[1] = new Fighter(next, next.id === p1.char.id ? 1 : 0)
+    this.controllers[1] = new CpuController(this.difficulty, 1)
+    this.names[1] = this.mode === 'cpu' ? `${next.name} CPU` : next.name
   }
 
   private startRound() {
@@ -208,7 +225,8 @@ export class Match implements ArenaView {
       case 'intro':
         if (this.phaseT === 1) {
           const final = this.wins[0] === ROUNDS_TO_WIN - 1 && this.wins[1] === ROUNDS_TO_WIN - 1
-          this.say(final ? 'FINAL ROUND' : `ROUND ${this.round}`, 70, final ? 3 : 4)
+          const sub = this.round > 1 && this.rotatePool.length ? `NEW OPPONENT: ${this.fighters[1].char.name}` : undefined
+          this.say(final ? 'FINAL ROUND' : `ROUND ${this.round}`, 70, final ? 3 : 4, '#ffe135', sub)
         }
         if (this.phaseT === 72) this.say('FIGHT!', 40, 5, '#ff4a2a')
         if (this.phaseT >= 80) this.setPhase('fight')
@@ -282,6 +300,7 @@ export class Match implements ArenaView {
       return
     }
     this.round++
+    if (this.rotatePool.length) this.rotateOpponent()
     this.startRound()
   }
 
