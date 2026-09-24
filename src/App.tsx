@@ -6,6 +6,8 @@ import { Game } from './game/Game'
 import type { MatchResult } from './game/Match'
 import { ControlsBar, PauseOverlay, ResultOverlay, TitleOverlay } from './ui/Overlays'
 import { SelectScreen, VersusScreen, type SelectResult } from './ui/SelectScreen'
+import { SIDE_PAD, TouchControls } from './ui/TouchControls'
+import { useIsPortrait, useIsTouch } from './ui/useDevice'
 import { useScreenScale } from './ui/useScreenScale'
 import './App.css'
 
@@ -20,7 +22,16 @@ export default function App() {
   const [difficulty, setDifficulty] = useState<Difficulty>('normal')
   const [setup, setSetup] = useState<SelectResult | null>(null)
   const [result, setResult] = useState<MatchResult | null>(null)
-  const scale = useScreenScale(VIEW_W, VIEW_H)
+  const touch = useIsTouch()
+  const portrait = useIsPortrait()
+  // phones: controls go under the screen in portrait, beside it in landscape
+  const padLayout = portrait ? 'below' : 'side'
+  const scale = useScreenScale(
+    VIEW_W,
+    VIEW_H,
+    touch ? (portrait ? 330 : 8) : 90,
+    touch ? (portrait ? 8 : 2 * SIDE_PAD) : 24,
+  )
 
   useEffect(() => {
     const game = new Game(canvasRef.current!, {
@@ -77,7 +88,7 @@ export default function App() {
   const p1 = setup && (screen === 'fight' || screen === 'paused' || screen === 'over') ? characterById(setup.p1) : null
 
   return (
-    <div className="app">
+    <div className={`app ${touch ? `touch pad-${padLayout}` : ''}`}>
       <div
         className="cabinet"
         style={{ width: VIEW_W * scale, height: VIEW_H * scale, ['--s' as string]: String(scale) }}
@@ -85,7 +96,12 @@ export default function App() {
         <canvas ref={canvasRef} className="screen" width={VIEW_W} height={VIEW_H} />
         <div className="scanlines" />
         {screen === 'title' && (
-          <TitleOverlay difficulty={difficulty} onCycle={cycleDifficulty} onStart={() => setScreen('select')} />
+          <TitleOverlay
+            difficulty={difficulty}
+            onCycle={cycleDifficulty}
+            onStart={() => setScreen('select')}
+            touch={touch}
+          />
         )}
         {screen === 'select' && (
           <SelectScreen
@@ -110,7 +126,16 @@ export default function App() {
           />
         )}
       </div>
-      <ControlsBar special={p1 ? { name: p1.special.move.name, label: p1.special.label } : null} />
+      {touch && portrait && <div className="rotate-hint">↻ TURN YOUR PHONE SIDEWAYS FOR A BIGGER SCREEN</div>}
+      {touch ? (
+        <TouchControls
+          layout={padLayout}
+          fighting={screen === 'fight'}
+          special={p1 ? { name: p1.special.move.name, label: p1.special.label } : null}
+        />
+      ) : (
+        <ControlsBar special={p1 ? { name: p1.special.move.name, label: p1.special.label } : null} />
+      )}
     </div>
   )
 }

@@ -5,6 +5,7 @@ export function TitleOverlay(props: {
   difficulty: Difficulty
   onCycle: (dir: 1 | -1) => void
   onStart: () => void
+  touch?: boolean
 }) {
   return (
     <div className="overlay title-overlay">
@@ -23,7 +24,7 @@ export function TitleOverlay(props: {
         </button>
       </div>
       <button className="start blink" onClick={props.onStart}>
-        PRESS ENTER
+        {props.touch ? 'TAP TO START' : 'PRESS ENTER'}
       </button>
       <p className="build">6 EMPLOYEES · 5 ROOMS · 1 VC</p>
     </div>
