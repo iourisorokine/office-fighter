@@ -1,3 +1,4 @@
+import { styled } from '../fighter/poses'
 import type { CharacterDef } from '../types'
 import { SPR_H, SPR_W, spriteFor } from './puppet'
 
@@ -11,7 +12,7 @@ export function portraitURL(char: CharacterDef, pose: 'idle' | 'win' = 'idle', p
   const key = `${char.id}|${pose}|${palette}`
   const hit = cache.get(key)
   if (hit) return hit
-  const p = pose === 'win' ? char.poses.win(0) : char.poses.idle(0)
+  const p = styled(pose === 'win' ? char.poses.win(0) : char.poses.idle(0), char.style, true)
   const sprite = spriteFor(p, char.body, char.look, char.palettes[palette % char.palettes.length], char.id)
   const data = sprite.getContext('2d')!.getImageData(0, 0, SPR_W, SPR_H).data
   let x0 = SPR_W

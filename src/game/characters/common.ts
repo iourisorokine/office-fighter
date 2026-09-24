@@ -5,7 +5,7 @@ import type { MoveDef, MoveSet, Pose } from '../types'
  * poses) and a helper to derive a character's own version of a move.
  */
 
-export const guard = { nearArm: { ik: [7, 47] as [number, number] }, farArm: { ik: [13, 45] as [number, number] } }
+export const guard = { nearArm: { ik: [9, 41] as [number, number] }, farArm: { ik: [14, 39] as [number, number] } }
 export const crouchArms = { nearArm: { ik: [14, 33] as [number, number] }, farArm: { ik: [19, 30] as [number, number] } }
 export const airArms = { nearArm: { a: [60, 150] as [number, number] }, farArm: { a: [85, 125] as [number, number] } }
 

@@ -123,13 +123,13 @@ export interface Palette {
   propDark: string
 }
 
-export type HairStyle = 'short' | 'bun' | 'messy' | 'slick' | 'bob' | 'crew'
+export type HairStyle = 'short' | 'bun' | 'messy' | 'slick' | 'bob' | 'crew' | 'beehive' | 'mop'
 export type PropKind = 'none' | 'folder' | 'keyboard' | 'phone' | 'laptop' | 'whiteboard' | 'cash'
 
 /** Visual traits that make each office archetype recognisable. */
 export interface Look {
   hair: HairStyle
-  top: 'shirt' | 'tshirt' | 'jacket' | 'sweater' | 'turtleneck' | 'vest'
+  top: 'shirt' | 'tshirt' | 'jacket' | 'sweater' | 'turtleneck' | 'vest' | 'hoodie'
   /** horizontal stripes (accent colour) on the top */
   stripes?: boolean
   tie: boolean
@@ -137,12 +137,34 @@ export interface Look {
   /** belly bulge in pixels (0 = none) */
   belly: number
   shoes: 'flat' | 'heels' | 'sneakers'
-  glasses: 'none' | 'normal' | 'huge' | 'shades'
+  /** glare = opaque lenses reflecting a screen */
+  glasses: 'none' | 'normal' | 'huge' | 'shades' | 'glare'
   beard: boolean
   lipstick: boolean
   grin: boolean
   logo: boolean
   prop: PropKind
+  /** size multiplier for the prop (default 1) */
+  propScale?: number
+  headphones?: boolean
+  earrings?: boolean
+}
+
+/**
+ * Per-character body language applied on top of the shared poses:
+ * posture, stance width, where the guard is held.
+ */
+export interface PoseStyle {
+  /** extra forward lean (degrees, + = hunched) */
+  lean?: number
+  /** extra head tilt (degrees, + = chin down) */
+  head?: number
+  /** multiplier on how far apart planted feet are */
+  stance?: number
+  /** hip drop in pixels (bent knees) */
+  squat?: number
+  /** offset of the guard (arm IK targets) in neutral poses */
+  guard?: [number, number]
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +278,7 @@ export interface CharacterDef {
   special: SpecialDef
   /** half width of the body hurtbox */
   hurtHalfW: number
+  style?: PoseStyle
   /** blurb for the select screen */
   bio: string
 }

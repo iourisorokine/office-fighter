@@ -25,3 +25,4 @@ dist-ssr
 dist-single
 *.tgz
 package-lock.json
+Claude outputs/

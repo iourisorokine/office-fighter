@@ -1,4 +1,5 @@
 import { GRAVITY, INPUT_BUFFER, STAGE_LEFT, STAGE_RIGHT } from '../constants'
+import { styled } from './poses'
 import {
   emptyInput,
   type CharacterDef,
@@ -442,6 +443,11 @@ export class Fighter {
   // ---------------------------------------------------------------------------
 
   getPose(): Pose {
+    const neutral = ['idle', 'walkF', 'walkB', 'crouch', 'prejump', 'land', 'jump', 'win', 'lose'].includes(this.state)
+    return styled(this.rawPose(), this.char.style, neutral)
+  }
+
+  private rawPose(): Pose {
     const p = this.char.poses
     switch (this.state) {
       case 'idle':

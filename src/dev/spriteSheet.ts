@@ -1,4 +1,5 @@
 import { BOSS, ROSTER } from '../game/characters'
+import { styled } from '../game/fighter/poses'
 import { SPR_H, SPR_OX, SPR_OY, SPR_W, spriteFor } from '../game/render/puppet'
 import type { CharacterDef, Pose } from '../game/types'
 
@@ -43,7 +44,7 @@ for (const r of rows) {
     ctx.fillStyle = '#556'
     ctx.fillRect(x, y + SPR_OY, cellW, 1)
     ctx.fillRect(x + SPR_OX, y, 1, SPR_H)
-    ctx.drawImage(spriteFor(pose, r.c.body, r.c.look, r.c.palettes[r.pal], r.c.id), x, y)
+    ctx.drawImage(spriteFor(styled(pose, r.c.style, !name.includes(' ')), r.c.body, r.c.look, r.c.palettes[r.pal], r.c.id), x, y)
     ctx.fillStyle = '#fff'
     ctx.font = '8px monospace'
     ctx.fillText(name, x + 3, y + SPR_H + 9)

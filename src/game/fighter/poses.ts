@@ -1,4 +1,4 @@
-import type { Pose, PoseSet } from '../types'
+import type { Limb, Pose, PoseSet, PoseStyle } from '../types'
 
 /**
  * Key poses for a generic, average-sized office worker.
@@ -6,9 +6,10 @@ import type { Pose, PoseSet } from '../types'
  * Ankle IK targets sit at y=2 so the shoe soles touch the floor.
  */
 
+// fists held at chest height, so the face stays visible
 const guardArms = (dy = 0) => ({
-  nearArm: { ik: [9, 47 + dy] as [number, number] },
-  farArm: { ik: [15, 43 + dy] as [number, number] },
+  nearArm: { ik: [11, 41 + dy] as [number, number] },
+  farArm: { ik: [16, 38 + dy] as [number, number] },
 })
 
 export const stance = (bob = 0): Pose => ({
@@ -157,4 +158,28 @@ export const defaultPoses: PoseSet = {
     nearArm: { a: [15, 5] },
     farArm: { a: [25, 10] },
   }),
+}
+
+/**
+ * Apply a character's body language to a pose. `neutral` poses (idle, walk,
+ * guard, jump...) also get the character's own guard position.
+ */
+export function styled(pose: Pose, style: PoseStyle | undefined, neutral: boolean): Pose {
+  if (!style) return pose
+  const stance = style.stance ?? 1
+  const squat = style.squat ?? 0
+  const [gx, gy] = style.guard ?? [0, 0]
+  const leg = (l: Limb): Limb => (l.ik && l.ik[1] <= 3 ? { ik: [Math.round(l.ik[0] * stance), l.ik[1]] } : l)
+  const arm = (l: Limb): Limb => (neutral && l.ik ? { ik: [l.ik[0] + gx, l.ik[1] + gy - squat] } : l)
+  const lying = Math.abs(pose.lean) >= 80
+  return {
+    ...pose,
+    hip: lying ? pose.hip : [pose.hip[0], pose.hip[1] - squat],
+    lean: lying ? pose.lean : pose.lean + (style.lean ?? 0),
+    head: (pose.head ?? 0) + (lying ? 0 : (style.head ?? 0)),
+    nearLeg: leg(pose.nearLeg),
+    farLeg: leg(pose.farLeg),
+    nearArm: arm(pose.nearArm),
+    farArm: arm(pose.farArm),
+  }
 }
