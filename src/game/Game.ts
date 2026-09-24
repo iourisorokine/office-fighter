@@ -6,6 +6,7 @@ import { KeyboardInput } from './input'
 import { FixedLoop } from './loop'
 import { Match, type MatchResult } from './Match'
 import { drawEffects, drawShadow } from './render/effects'
+import { drawBossIntro } from './render/bossIntro'
 import { drawAnnouncer, drawHud } from './render/hud'
 import { SPR_OX, SPR_OY, spriteFor } from './render/puppet'
 import { drawIncidentOverlay, drawProjectiles, drawSticker, drawTowers } from './render/specialsFx'
@@ -65,6 +66,7 @@ export class Game {
       difficulty: 'hard',
       chars: [a, b],
       rotatePool: ROSTER,
+      stagePool: STAGES.map((st) => st.id),
       stageId: pick(STAGES).id,
       keyboard: this.keyboard,
       onEnd: () => this.startAttract(),
@@ -80,6 +82,7 @@ export class Game {
       chars: [characterById(setup.p1), characterById(setup.cpu)],
       rotatePool: ROSTER,
       boss: { char: BOSS, stageId: 'boss' },
+      stagePool: STAGES.map((st) => st.id),
       stageId: setup.stageId,
       keyboard: this.keyboard,
       onEnd: (r) => this.cb.onMatchEnd?.(r),
@@ -122,6 +125,10 @@ export class Game {
   private render() {
     const ctx = this.ctx
     const m = this.match
+    if (m && m.phase === 'bossIntro') {
+      drawBossIntro(ctx, m.phaseT, m.fighters[1].char, this.frame)
+      return
+    }
     ctx.save()
     if (m && m.shake > 0) {
       const amp = m.shake > 8 ? 2 : 1

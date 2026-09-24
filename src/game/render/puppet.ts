@@ -125,8 +125,22 @@ function boundsOf(points: Vec2[], pad: number): Bounds {
   return { x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad }
 }
 
+/**
+ * Palette-indexed pixel grid. `k` is the resolution: 1 for in-game sprites,
+ * more for close-ups (same shapes, finer pixels and thinner outlines).
+ */
 class PixelBuffer {
-  readonly data = new Uint8Array(SPR_W * SPR_H)
+  readonly k: number
+  readonly w: number
+  readonly h: number
+  readonly data: Uint8Array
+
+  constructor(k = 1) {
+    this.k = k
+    this.w = Math.round(SPR_W * k)
+    this.h = Math.round(SPR_H * k)
+    this.data = new Uint8Array(this.w * this.h)
+  }
 
   /**
    * Fill a shape: outline ring, then a shadow rim on the lower edge, then the
@@ -141,41 +155,43 @@ class PixelBuffer {
     colorAt?: (x: number, y: number, shaded: boolean) => number | null,
     outline = true,
   ) {
-    const px0 = Math.max(0, Math.floor(SPR_OX + b.x0))
-    const px1 = Math.min(SPR_W - 1, Math.ceil(SPR_OX + b.x1))
-    const py0 = Math.max(0, Math.floor(SPR_OY - b.y1))
-    const py1 = Math.min(SPR_H - 1, Math.ceil(SPR_OY - b.y0))
+    const k = this.k
+    const edge = 1 / k
+    const px0 = Math.max(0, Math.floor((SPR_OX + b.x0) * k))
+    const px1 = Math.min(this.w - 1, Math.ceil((SPR_OX + b.x1) * k))
+    const py0 = Math.max(0, Math.floor((SPR_OY - b.y1) * k))
+    const py1 = Math.min(this.h - 1, Math.ceil((SPR_OY - b.y0) * k))
     for (let py = py0; py <= py1; py++) {
-      const wy = SPR_OY - (py + 0.5)
+      const wy = SPR_OY - (py + 0.5) / k
       for (let px = px0; px <= px1; px++) {
-        const wx = px + 0.5 - SPR_OX
+        const wx = (px + 0.5) / k - SPR_OX
         if (!shape(wx, wy, 0)) continue
         let c: number
-        if (outline && !shape(wx, wy, 1)) c = OUT
+        if (outline && !shape(wx, wy, edge)) c = OUT
         else {
-          const shaded = shade !== null && !shape(wx, wy - shadeShift, 1)
+          const shaded = shade !== null && !shape(wx, wy - shadeShift, edge)
           c = shaded ? (shade as number) : base
           if (colorAt) {
             const o = colorAt(wx, wy, shaded)
             if (o !== null) c = o
           }
         }
-        this.data[py * SPR_W + px] = c
+        this.data[py * this.w + px] = c
       }
     }
   }
 
+  /** one "world pixel" (a k x k block at high resolution) */
   dot(p: Vec2, c: number) {
-    const px = Math.floor(SPR_OX + p[0])
-    const py = Math.floor(SPR_OY - p[1])
-    if (px >= 0 && px < SPR_W && py >= 0 && py < SPR_H) this.data[py * SPR_W + px] = c
-  }
-
-  get(p: Vec2) {
-    const px = Math.floor(SPR_OX + p[0])
-    const py = Math.floor(SPR_OY - p[1])
-    if (px >= 0 && px < SPR_W && py >= 0 && py < SPR_H) return this.data[py * SPR_W + px]
-    return T
+    const k = this.k
+    const size = Math.max(1, Math.ceil(k))
+    const px = Math.floor((SPR_OX + p[0]) * k)
+    const py = Math.floor((SPR_OY - p[1]) * k)
+    for (let y = py; y < py + size; y++) {
+      for (let x = px; x < px + size; x++) {
+        if (x >= 0 && x < this.w && y >= 0 && y < this.h) this.data[y * this.w + x] = c
+      }
+    }
   }
 }
 
@@ -670,9 +686,9 @@ function drawTorso(c: Ctx, hip: Vec2, lean: number) {
   return { neck, u }
 }
 
-function renderPoseToCanvas(rawPose: Pose, body: BodyDims, look: Look, palette: Palette): HTMLCanvasElement {
+function renderPoseToCanvas(rawPose: Pose, body: BodyDims, look: Look, palette: Palette, k = 1): HTMLCanvasElement {
   const pose = adaptPose(rawPose, body)
-  const c: Ctx = { buf: new PixelBuffer(), body, look }
+  const c: Ctx = { buf: new PixelBuffer(k), body, look }
   const hip = pose.hip
   const u: Vec2 = [Math.sin(pose.lean * D2R), Math.cos(pose.lean * D2R)]
   const neckPt = add(hip, mul(u, body.torso))
@@ -691,10 +707,10 @@ function renderPoseToCanvas(rawPose: Pose, body: BodyDims, look: Look, palette: 
   drawFist(c, near.fist, false)
 
   const canvas = document.createElement('canvas')
-  canvas.width = SPR_W
-  canvas.height = SPR_H
+  canvas.width = c.buf.w
+  canvas.height = c.buf.h
   const ctx = canvas.getContext('2d')!
-  const img = ctx.createImageData(SPR_W, SPR_H)
+  const img = ctx.createImageData(c.buf.w, c.buf.h)
   const out = new Uint32Array(img.data.buffer)
   const table = paletteTable(palette)
   for (let i = 0; i < c.buf.data.length; i++) out[i] = table[c.buf.data[i]]
@@ -713,4 +729,24 @@ export function spriteFor(pose: Pose, body: BodyDims, look: Look, palette: Palet
     cache.set(key, c)
   }
   return c
+}
+
+/** A high-resolution render for cut-scenes (not cached). Origin is (SPR_OX*k, SPR_OY*k). */
+export function closeUpSprite(pose: Pose, body: BodyDims, look: Look, palette: Palette, k: number): HTMLCanvasElement {
+  return renderPoseToCanvas(pose, body, look, palette, k)
+}
+
+/** Where the head and hands end up for a pose (sprite space, y up), for drawing extras on top. */
+export function skeletonOf(rawPose: Pose, body: BodyDims) {
+  const pose = adaptPose(rawPose, body)
+  const u: Vec2 = [Math.sin(pose.lean * D2R), Math.cos(pose.lean * D2R)]
+  const neck = add(pose.hip, mul(u, body.torso))
+  const shoulder = add(neck, mul(u, -3))
+  const ha = (pose.lean + (pose.head ?? 0)) * D2R
+  const hu: Vec2 = [Math.sin(ha), Math.cos(ha)]
+  const hp: Vec2 = [Math.cos(ha), -Math.sin(ha)]
+  const head = add(neck, mul(hu, body.neck + body.headR - 1))
+  const near = solveLimb(shoulder, pose.nearArm, body.upperArm, body.foreArm, 'arm')
+  const far = solveLimb(add(shoulder, [-1, 0]), pose.farArm, body.upperArm, body.foreArm, 'arm')
+  return { neck, head, headUp: hu, headFwd: hp, nearHand: near.end, nearElbow: near.joint, farHand: far.end }
 }

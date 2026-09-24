@@ -24,7 +24,10 @@ import {
 import { emptyInput, type CharacterDef, type HitProps, type InputSnapshot, type MoveDef } from './types'
 
 export type MatchMode = 'cpu' | 'attract'
-export type Phase = 'intro' | 'fight' | 'ko' | 'timeover' | 'matchOver'
+export type Phase = 'bossIntro' | 'intro' | 'fight' | 'ko' | 'timeover' | 'matchOver'
+
+/** length of the VC's entrance cut-scene (frames) */
+export const BOSS_INTRO_FRAMES = 340
 
 /** 0 = player 1 wins, 1 = player 2 / CPU wins, -1 = draw */
 export type MatchWinner = 0 | 1 | -1
@@ -74,6 +77,8 @@ export interface MatchConfig {
   rotatePool?: CharacterDef[]
   /** bonus boss after a 2-0 (player vs CPU only) */
   boss?: { char: CharacterDef; stageId: string }
+  /** if set, the room changes (at random) between rounds */
+  stagePool?: string[]
   stageId: string
   keyboard: KeyboardInput
   onEnd?: (r: MatchResult) => void
@@ -119,6 +124,7 @@ export class Match implements ArenaView {
   bossRound = false
   private bonus: 'won' | 'lost' | undefined
   private readonly boss?: { char: CharacterDef; stageId: string }
+  private readonly stagePool: string[]
   announce: Announce | null = null
   combo: { player: 0 | 1; count: number; t: number } | null = null
   private roundWinner: MatchWinner | null = null
@@ -129,6 +135,7 @@ export class Match implements ArenaView {
     this.onEnd = cfg.onEnd
     this.rotatePool = cfg.rotatePool ?? []
     this.boss = cfg.mode === 'cpu' ? cfg.boss : undefined
+    this.stagePool = cfg.stagePool ?? []
     this.difficulty = cfg.mode === 'attract' ? 'hard' : cfg.difficulty
     const [c1, c2] = cfg.chars
     this.fighters = [new Fighter(c1, 0), new Fighter(c2, c1.id === c2.id ? 1 : 0)]
@@ -197,6 +204,8 @@ export class Match implements ArenaView {
     // always poll, so keyboard "pressed" edges don't pile up between rounds
     const in0 = this.controllers[0].poll(a, b, this)
     const in1 = this.controllers[1].poll(b, a, this)
+    // the VC's entrance can be skipped with an attack button
+    if (this.phase === 'bossIntro' && this.phaseT > 45 && (in0.pressed.lk || in0.pressed.hk)) this.setPhase('intro')
     a.update(live ? in0 : emptyInput(), b)
     b.update(live ? in1 : emptyInput(), a)
 
@@ -259,6 +268,10 @@ export class Match implements ArenaView {
   private updatePhase() {
     const [a, b] = this.fighters
     switch (this.phase) {
+      case 'bossIntro':
+        if (this.phaseT >= BOSS_INTRO_FRAMES) this.setPhase('intro')
+        break
+
       case 'intro':
         if (this.phaseT === 1) {
           const final = this.wins[0] === ROUNDS_TO_WIN - 1 && this.wins[1] === ROUNDS_TO_WIN - 1
@@ -342,6 +355,7 @@ export class Match implements ArenaView {
       this.stageId = this.boss.stageId
       this.round++
       this.startRound()
+      this.setPhase('bossIntro')
       return
     }
     if (done) {
@@ -357,6 +371,8 @@ export class Match implements ArenaView {
     }
     this.round++
     if (this.rotatePool.length) this.rotateOpponent()
+    const rooms = this.stagePool.filter((id) => id !== this.stageId)
+    if (rooms.length) this.stageId = rooms[Math.floor(Math.random() * rooms.length)]
     this.startRound()
   }
 

@@ -56,8 +56,8 @@ Directions in special moves are relative to where you face (→ = forward).
 | THE VC (secret boss) | cash, lots of it | **Raise** `↓ ↓ X`: money rains from the ceiling, every bill hurts | big, throws cash constantly |
 
 Each special recharges (gauge under the health bar, "SPECIAL" when ready).
-A new, random opponent steps in at every round, and the room is picked at random.
-Win the match **2-0** and the VC shows up for a bonus round in the boss's office:
+A new, random opponent steps in at every round, and the room changes every round too.
+Win the match **2-0** and the VC makes his entrance (a short cut-scene on his pile of cash, skippable with X/C), then fights you in the boss's office:
 beat him and you're funded (CEO ending); lose and you're still promoted.
 
 ## The rooms
