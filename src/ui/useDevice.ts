@@ -21,12 +21,35 @@ export function useIsTouch() {
   return touch
 }
 
-export function useIsPortrait() {
-  const [portrait, setPortrait] = useState(() => window.innerHeight > window.innerWidth)
+/**
+ * Current window size. Phones report the new size late after a rotation
+ * (and the browser bars slide in and out), so we listen to every relevant
+ * event and re-read the size a moment later as well.
+ */
+export function useViewport() {
+  const read = () => ({ w: window.innerWidth, h: window.innerHeight })
+  const [size, setSize] = useState(read)
   useEffect(() => {
-    const onResize = () => setPortrait(window.innerHeight > window.innerWidth)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    const timers: number[] = []
+    const update = () => {
+      setSize((prev) => {
+        const next = read()
+        return next.w === prev.w && next.h === prev.h ? prev : next
+      })
+    }
+    const onChange = () => {
+      update()
+      timers.push(window.setTimeout(update, 150), window.setTimeout(update, 500))
+    }
+    window.addEventListener('resize', onChange)
+    window.addEventListener('orientationchange', onChange)
+    window.visualViewport?.addEventListener('resize', onChange)
+    return () => {
+      window.removeEventListener('resize', onChange)
+      window.removeEventListener('orientationchange', onChange)
+      window.visualViewport?.removeEventListener('resize', onChange)
+      timers.forEach((t) => window.clearTimeout(t))
+    }
   }, [])
-  return portrait
+  return size
 }

@@ -7,8 +7,8 @@ import type { MatchResult } from './game/Match'
 import { ControlsBar, PauseOverlay, ResultOverlay, TitleOverlay } from './ui/Overlays'
 import { SelectScreen, VersusScreen, type SelectResult } from './ui/SelectScreen'
 import { TouchControls } from './ui/TouchControls'
-import { useIsPortrait, useIsTouch } from './ui/useDevice'
-import { useScreenScale } from './ui/useScreenScale'
+import { useIsTouch, useViewport } from './ui/useDevice'
+import { screenScale } from './ui/screenScale'
 import './App.css'
 
 type Screen = 'title' | 'select' | 'vs' | 'fight' | 'paused' | 'over'
@@ -23,11 +23,16 @@ export default function App() {
   const [setup, setSetup] = useState<SelectResult | null>(null)
   const [result, setResult] = useState<MatchResult | null>(null)
   const touch = useIsTouch()
-  const portrait = useIsPortrait()
+  const view = useViewport()
+  const portrait = view.h > view.w
   // phones: a flat key bar under the screen in portrait; in landscape the
   // screen takes the whole display and the keys float over its corners
   const padLayout = portrait ? 'below' : 'float'
-  const scale = useScreenScale(VIEW_W, VIEW_H, touch ? (portrait ? 330 : 0) : 90, touch ? (portrait ? 4 : 0) : 24)
+  const scale = touch
+    ? portrait
+      ? screenScale(VIEW_W, VIEW_H, view.w, view.h, 330, 4)
+      : screenScale(VIEW_W, VIEW_H, view.w, view.h, 0, 0)
+    : screenScale(VIEW_W, VIEW_H, view.w, view.h)
 
   useEffect(() => {
     const game = new Game(canvasRef.current!, {
