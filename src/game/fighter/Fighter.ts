@@ -70,8 +70,11 @@ export class Fighter {
   comboCount = 0
   /** frames left before the special can be used again */
   specialCd = 0
-  /** frames left showing a complaint stuck on the face */
+  /** frames left showing a complaint / ticket stuck on the face */
   sticker = 0
+  stickerKind: 'complaint' | 'ticket' = 'complaint'
+  /** frames left of "scope creep": everything is slower */
+  slowed = 0
   input: InputSnapshot = emptyInput()
   events: FighterEvent[] = []
   private jumpDir = 0
@@ -111,6 +114,7 @@ export class Fighter {
     this.comboCount = 0
     this.specialCd = 0
     this.sticker = 0
+    this.slowed = 0
     this.events = []
     this.dirHistory = []
     this.lastLK = this.lastHK = -99
@@ -154,6 +158,7 @@ export class Fighter {
     this.t++
     if (this.specialCd > 0) this.specialCd--
     if (this.sticker > 0) this.sticker--
+    if (this.slowed > 0) this.slowed--
     this.input = inp
     if (inp.pressed.lk) this.lastLK = this.clock
     if (inp.pressed.hk) this.lastHK = this.clock
@@ -173,7 +178,7 @@ export class Fighter {
         if (this.t >= 4) {
           this.airborne = true
           this.vy = this.char.stats.jumpV
-          this.vx = this.jumpDir * this.char.stats.jumpVX
+          this.vx = this.jumpDir * this.char.stats.jumpVX * (this.slowed > 0 ? 0.6 : 1)
           this.airAttackUsed = false
           this.setState('jump')
         }
@@ -278,17 +283,21 @@ export class Fighter {
     }
     if (fwd) {
       if (this.state !== 'walkF') this.setState('walkF')
-      this.x += stats.walkF * this.facing
+      this.x += stats.walkF * this.facing * this.speedMul
     } else if (back) {
       if (threat) {
         if (this.state !== 'guard') this.setState('guard')
       } else {
         if (this.state !== 'walkB') this.setState('walkB')
-        this.x -= stats.walkB * this.facing
+        this.x -= stats.walkB * this.facing * this.speedMul
       }
     } else if (this.state !== 'idle') {
       this.setState('idle')
     }
+  }
+
+  private get speedMul() {
+    return this.slowed > 0 ? 0.5 : 1
   }
 
   private startAttack(move: MoveDef) {

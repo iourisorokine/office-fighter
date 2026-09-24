@@ -1,7 +1,7 @@
 import { FLOOR_Y } from '../constants'
 import { drawText } from './font'
 
-export type EffectKind = 'hit' | 'heavy' | 'block' | 'dust' | 'splash' | 'paper' | 'text'
+export type EffectKind = 'hit' | 'heavy' | 'block' | 'dust' | 'splash' | 'paper' | 'text' | 'cash'
 
 interface Particle {
   x: number
@@ -28,14 +28,14 @@ export function spawnText(text: string, x: number, y: number, color = '#ffe135',
 }
 
 export function spawnEffect(kind: EffectKind, x: number, y: number): Effect {
-  const n = kind === 'heavy' ? 10 : kind === 'hit' ? 6 : kind === 'dust' ? 5 : kind === 'splash' || kind === 'paper' ? 12 : 4
+  const n = kind === 'heavy' ? 10 : kind === 'hit' ? 6 : kind === 'dust' ? 5 : kind === 'splash' || kind === 'paper' ? 12 : kind === 'cash' ? 3 : 4
   const parts: Particle[] = []
   for (let i = 0; i < n; i++) {
     const a = kind === 'dust' ? Math.PI * (0.1 + 0.8 * (i / (n - 1))) : Math.random() * Math.PI * 2
-    const sp = kind === 'dust' ? 0.6 : 1.5 + Math.random() * 2
+    const sp = kind === 'dust' ? 0.6 : kind === 'cash' ? 0.5 + Math.random() : 1.5 + Math.random() * 2
     parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp })
   }
-  const dur = kind === 'dust' ? 18 : kind === 'heavy' ? 16 : kind === 'splash' || kind === 'paper' ? 26 : 12
+  const dur = kind === 'dust' ? 18 : kind === 'heavy' ? 16 : kind === 'splash' || kind === 'paper' ? 26 : kind === 'cash' ? 60 : 12
   return { kind, x, y, t: 0, dur, parts }
 }
 
@@ -46,7 +46,12 @@ export function updateEffects(list: Effect[]): Effect[] {
       p.x += p.vx
       p.y += p.vy
       if (e.kind === 'dust') p.vy *= 0.9
-      else if (e.kind === 'paper') {
+      else if (e.kind === 'cash') {
+        // banknotes flutter down slowly
+        p.vy = Math.max(-0.6, p.vy - 0.05)
+        p.vx = Math.sin((e.t + p.x) * 0.2) * 0.5
+        if (p.y < 1) p.y = 1
+      } else if (e.kind === 'paper') {
         p.vy -= 0.05
         p.vx *= 0.95
       } else p.vy -= 0.15
@@ -75,6 +80,20 @@ export function drawEffects(ctx: CanvasRenderingContext2D, list: Effect[]) {
         const c = e.kind === 'splash' ? (i % 3 ? '#6b3a1e' : '#c89060') : i % 2 ? '#ffffff' : '#d8d8e0'
         px(ctx, p.x, FLOOR_Y - p.y, e.kind === 'paper' ? 3 : 2, c)
         if (e.kind === 'paper') px(ctx, p.x, FLOOR_Y - p.y + 1, 1, '#8a8aa0')
+      }
+      continue
+    }
+    if (e.kind === 'cash') {
+      for (const p of e.parts) {
+        const flip = Math.floor((e.t + p.x) / 5) % 2
+        const x = Math.round(p.x)
+        const y = Math.round(FLOOR_Y - p.y)
+        ctx.fillStyle = '#1e5a2a'
+        ctx.fillRect(x - 3, y - 2, flip ? 7 : 5, flip ? 4 : 5)
+        ctx.fillStyle = '#6cc05a'
+        ctx.fillRect(x - 2, y - 1, flip ? 5 : 3, flip ? 2 : 3)
+        ctx.fillStyle = '#d8f0c0'
+        ctx.fillRect(x, y - 1, 1, 1)
       }
       continue
     }

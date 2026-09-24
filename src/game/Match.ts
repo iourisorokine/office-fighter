@@ -9,9 +9,17 @@ import {
   INCIDENT_WARNING,
   moveProjectile,
   projectileRect,
+  RAIN_DURATION,
+  spawnBill,
   spawnProjectile,
+  TOWER_END,
+  TOWER_HALF_W,
+  TOWER_HIT,
+  TOWER_LAND,
   type Incident,
   type Projectile,
+  type Rain,
+  type Tower,
 } from './specials'
 import { emptyInput, type CharacterDef, type HitProps, type InputSnapshot, type MoveDef } from './types'
 
@@ -24,12 +32,15 @@ export type MatchWinner = 0 | 1 | -1
 export interface MatchResult {
   winner: MatchWinner
   wins: [number, number]
+  /** outcome of the bonus round against the VC, if it happened */
+  bonus?: 'won' | 'lost'
 }
 
 /** What controllers can see besides the two fighters. */
 export interface ArenaView {
   projectiles: readonly Projectile[]
   incident: Incident | null
+  towers: readonly Tower[]
 }
 
 export interface Controller {
@@ -61,6 +72,8 @@ export interface MatchConfig {
   chars: [CharacterDef, CharacterDef]
   /** if set, player 2 becomes a random different character every new round */
   rotatePool?: CharacterDef[]
+  /** bonus boss after a 2-0 (player vs CPU only) */
+  boss?: { char: CharacterDef; stageId: string }
   stageId: string
   keyboard: KeyboardInput
   onEnd?: (r: MatchResult) => void
@@ -77,7 +90,7 @@ export class Match implements ArenaView {
   readonly fighters: [Fighter, Fighter]
   readonly names: [string, string]
   readonly mode: MatchMode
-  readonly stageId: string
+  stageId: string
   private readonly controllers: [Controller, Controller]
   private readonly onEnd?: (r: MatchResult) => void
   private readonly rotatePool: CharacterDef[]
@@ -100,6 +113,12 @@ export class Match implements ArenaView {
   effects: Effect[] = []
   projectiles: Projectile[] = []
   incident: Incident | null = null
+  towers: Tower[] = []
+  rain: Rain | null = null
+  /** true during the bonus round against the VC */
+  bossRound = false
+  private bonus: 'won' | 'lost' | undefined
+  private readonly boss?: { char: CharacterDef; stageId: string }
   announce: Announce | null = null
   combo: { player: 0 | 1; count: number; t: number } | null = null
   private roundWinner: MatchWinner | null = null
@@ -109,6 +128,7 @@ export class Match implements ArenaView {
     this.stageId = cfg.stageId
     this.onEnd = cfg.onEnd
     this.rotatePool = cfg.rotatePool ?? []
+    this.boss = cfg.mode === 'cpu' ? cfg.boss : undefined
     this.difficulty = cfg.mode === 'attract' ? 'hard' : cfg.difficulty
     const [c1, c2] = cfg.chars
     this.fighters = [new Fighter(c1, 0), new Fighter(c2, c1.id === c2.id ? 1 : 0)]
@@ -142,6 +162,8 @@ export class Match implements ArenaView {
     this.effects = []
     this.projectiles = []
     this.incident = null
+    this.towers = []
+    this.rain = null
     this.combo = null
     this.roundWinner = null
     this.setPhase('intro')
@@ -184,9 +206,19 @@ export class Match implements ArenaView {
       this.resolveHits()
       this.updateProjectiles()
       this.updateIncident()
+      this.updateTowers()
+      this.updateRain()
     } else {
       this.projectiles = []
       this.incident = null
+      this.towers = []
+      this.rain = null
+    }
+    // the VC can't stop throwing money around
+    for (const f of this.fighters) {
+      if (f.char.look.prop === 'cash' && this.phaseT % 22 === 0 && f.health > 0) {
+        this.effects.push(spawnEffect('cash', f.x + f.facing * 14, f.y + 44))
+      }
     }
     this.effects = updateEffects(this.effects)
     this.updateTrail()
@@ -201,8 +233,13 @@ export class Match implements ArenaView {
         if (ev.type === 'dust' || ev.type === 'land') this.effects.push(spawnEffect('dust', ev.x, 0))
         else if (ev.type === 'special' && f.char.special.move.spawn?.kind !== 'incident') this.effects.push(spawnText(`${ev.name.toUpperCase()}!`, f.x, f.y + 84, '#ffffff', 50))
         else if (ev.type === 'spawn' && this.phase === 'fight') {
+          const opp = this.fighters[1 - i]
           if (ev.kind === 'incident') this.incident = { owner: i as 0 | 1, t: 0, fired: false }
-          else this.projectiles.push(spawnProjectile(ev.kind, i as 0 | 1, f))
+          else if (ev.kind === 'tower') this.towers.push({ owner: i as 0 | 1, x: opp.x, t: 0, fired: false })
+          else if (ev.kind === 'raise') {
+            this.rain = { owner: i as 0 | 1, t: 0 }
+            this.say('RAISE!', 70, 5, '#5fe08a', 'MAKE IT RAIN')
+          } else this.projectiles.push(spawnProjectile(ev.kind, i as 0 | 1, f))
         }
       }
       f.events = []
@@ -226,7 +263,8 @@ export class Match implements ArenaView {
         if (this.phaseT === 1) {
           const final = this.wins[0] === ROUNDS_TO_WIN - 1 && this.wins[1] === ROUNDS_TO_WIN - 1
           const sub = this.round > 1 && this.rotatePool.length ? `NEW OPPONENT: ${this.fighters[1].char.name}` : undefined
-          this.say(final ? 'FINAL ROUND' : `ROUND ${this.round}`, 70, final ? 3 : 4, '#ffe135', sub)
+          if (this.bossRound) this.say('BONUS ROUND', 70, 4, '#5fe08a', 'A VC WANTS A WORD')
+          else this.say(final ? 'FINAL ROUND' : `ROUND ${this.round}`, 70, final ? 3 : 4, '#ffe135', sub)
         }
         if (this.phaseT === 72) this.say('FIGHT!', 40, 5, '#ff4a2a')
         if (this.phaseT >= 80) this.setPhase('fight')
@@ -274,7 +312,7 @@ export class Match implements ArenaView {
       case 'matchOver':
         if (this.phaseT === 150) {
           const winner: MatchWinner = this.wins[0] === this.wins[1] ? -1 : this.wins[0] > this.wins[1] ? 0 : 1
-          this.onEnd?.({ winner, wins: [...this.wins] as [number, number] })
+          this.onEnd?.({ winner, wins: [...this.wins] as [number, number], bonus: this.bonus })
         }
         break
     }
@@ -282,12 +320,30 @@ export class Match implements ArenaView {
 
   private endRound() {
     const w = this.roundWinner
+    if (this.bossRound) {
+      this.bonus = w === 0 ? 'won' : 'lost'
+      this.setPhase('matchOver')
+      if (w === 0) this.say('FUNDED!', 150, 5, '#5fe08a', "YOU'RE THE CEO NOW")
+      else this.say('THE VC PASSED', 150, 3, '#ff4a2a', 'STILL PROMOTED, THOUGH')
+      return
+    }
     if (w === -1 || w === null) {
       this.wins[0]++
       this.wins[1]++
     } else this.wins[w]++
 
     const done = this.wins[0] >= ROUNDS_TO_WIN || this.wins[1] >= ROUNDS_TO_WIN
+    if (done && this.boss && this.wins[0] >= ROUNDS_TO_WIN && this.wins[1] === 0) {
+      // flawless 2-0: the VC shows up for a bonus round in the boss's office
+      this.bossRound = true
+      this.fighters[1] = new Fighter(this.boss.char, 0)
+      this.controllers[1] = new CpuController(this.difficulty, 1)
+      this.names[1] = `${this.boss.char.name} CPU`
+      this.stageId = this.boss.stageId
+      this.round++
+      this.startRound()
+      return
+    }
     if (done) {
       this.setPhase('matchOver')
       const winner = this.wins[0] === this.wins[1] ? -1 : this.wins[0] > this.wins[1] ? 0 : 1
@@ -397,7 +453,8 @@ export class Match implements ArenaView {
       for (let j = i + 1; j < list.length; j++) {
         const p = list[i]
         const q = list[j]
-        if (p.dead || q.dead || p.owner === q.owner || !overlap(projectileRect(p), projectileRect(q))) continue
+        if (p.dead || q.dead || p.owner === q.owner || p.kind === 'bill' || q.kind === 'bill') continue
+        if (!overlap(projectileRect(p), projectileRect(q))) continue
         const pBig = p.kind === 'bullshit'
         const qBig = q.kind === 'bullshit'
         if (pBig === qBig) p.dead = q.dead = true
@@ -419,9 +476,17 @@ export class Match implements ArenaView {
       const cy = (Math.max(r.y0, hurt.y0) + Math.min(r.y1, hurt.y1)) / 2
       const landed = this.applyHit(owner, def, p.hit, p.x - dir * 40, dir, cx, cy, false)
       if (p.kind === 'coffee') this.effects.push(spawnEffect('splash', cx, cy))
+      if (p.kind === 'cash' || p.kind === 'bill') this.effects.push(spawnEffect('cash', cx, cy))
+      if (p.kind === 'requirement' && landed) {
+        def.sticker = 90
+        def.stickerKind = 'ticket'
+        def.slowed = 180
+        this.effects.push(spawnText('SCOPE CREEP!', def.x, def.y + 84, '#ffe135'))
+      }
       if (p.kind === 'complaint') {
         this.effects.push(spawnEffect('paper', cx, cy))
         if (landed) {
+          def.stickerKind = 'complaint'
           def.sticker = 70
           this.effects.push(spawnText('COMPLAINT FILED!', def.x, def.y + 84, '#ff4a2a'))
         }
@@ -458,6 +523,39 @@ export class Match implements ArenaView {
     if (inc.t >= INCIDENT_END) this.incident = null
   }
 
+  private updateTowers() {
+    for (const tw of this.towers) {
+      tw.t++
+      if (tw.t !== TOWER_LAND) continue
+      tw.fired = true
+      this.shake = Math.max(this.shake, 12)
+      this.effects.push(spawnEffect('dust', tw.x - 10, 0), spawnEffect('dust', tw.x + 10, 0))
+      const owner = this.fighters[tw.owner]
+      const target = this.fighters[1 - tw.owner]
+      const under = Math.abs(target.x - tw.x) < TOWER_HALF_W + target.char.hurtHalfW && target.y < 50
+      if (under && target.hurtboxesWorld().length > 0) {
+        const [hx, hy] = target.headPos()
+        this.effects.push(spawnText('OVER-ENGINEERED!', target.x, target.y + 90, '#ff4a2a'))
+        this.applyHit(owner, target, TOWER_HIT, tw.x, owner.facing, hx, hy, false)
+      } else {
+        this.effects.push(spawnText('MISSED THE DEADLINE', tw.x, 70, '#9fd0f0'))
+      }
+    }
+    this.towers = this.towers.filter((tw) => tw.t < TOWER_END)
+  }
+
+  private updateRain() {
+    const r = this.rain
+    if (!r) return
+    r.t++
+    const target = this.fighters[1 - r.owner]
+    if (r.t % 10 === 0) {
+      const x = Math.max(10, Math.min(VIEW_W - 10, target.x + (Math.random() - 0.5) * 180))
+      this.projectiles.push(spawnBill(r.owner, x))
+    }
+    if (r.t >= RAIN_DURATION || this.fighters[r.owner].health <= 0) this.rain = null
+  }
+
   private knockOut(att: Fighter) {
     const [a, b] = this.fighters
     this.hitstop = 36
@@ -467,6 +565,8 @@ export class Match implements ArenaView {
     const both = a.health <= 0 && b.health <= 0
     this.roundWinner = both ? -1 : (this.fighters.indexOf(att) as 0 | 1)
     if (both) this.say('DOUBLE K.O.', 150, 4, '#ff4a2a', 'EVERYONE IS FIRED')
+    else if (this.bossRound && this.roundWinner === 0) this.say('DEAL CLOSED!', 150, 4, '#5fe08a')
+    else if (this.bossRound) this.say("YOU'RE DILUTED!", 150, 3, '#ff4a2a')
     else if (this.mode === 'cpu' && this.roundWinner === 0) this.say("YOU'RE PROMOTED!", 150, 3, '#ffe135')
     else this.say("YOU'RE FIRED!", 150, 3, '#ff4a2a')
     this.setPhase('ko')

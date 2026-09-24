@@ -52,6 +52,8 @@ export class CpuController {
   private seenProjectile = -1
   private dodgeProjectile: 'jump' | 'block' | 'none' = 'none'
   private seenIncident = false
+  private seenTower: object | null = null
+  private dodgeTower = false
   private dodgeIncident = false
 
   /** which player this CPU controls (to tell its own projectiles from the opponent's) */
@@ -93,6 +95,17 @@ export class CpuController {
         return finish()
       }
     } else this.seenIncident = false
+
+    // --- a tower is about to land on us: walk out of the shadow -------------
+    const tower = arena.towers.find((tw) => tw.owner !== this.side && !tw.fired && Math.abs(tw.x - self.x) < 36)
+    if (tower && tower !== this.seenTower) {
+      this.seenTower = tower
+      this.dodgeTower = chance(this.p.block + 0.1)
+    }
+    if (tower && this.dodgeTower && self.isActionable() && tower.t > 12) {
+      held[tower.x > self.x ? 'left' : 'right'] = true
+      return finish()
+    }
 
     // --- incoming projectile: jump over it or block -------------------------
     const threat = arena.projectiles.find(
@@ -209,19 +222,17 @@ export class CpuController {
     // specials: each character has a range where theirs makes sense
     if (self.specialCd === 0) {
       const kind = self.char.special.move.spawn?.kind
-      const odds =
-        kind === 'incident'
-          ? dist > 70 && !opp.airborne
-            ? 0.3
-            : 0
-          : kind === 'bullshit'
-            ? dist > 40 && dist < 230
-              ? 0.25
-              : 0
-            : dist > 90
-              ? 0.35
-              : 0
+      let odds = 0
+      if (kind === 'incident') odds = dist > 70 && !opp.airborne ? 0.3 : 0
+      else if (kind === 'bullshit') odds = dist > 40 && dist < 230 ? 0.25 : 0
+      else if (kind === 'tower') odds = dist > 60 ? 0.3 : 0.1
+      else if (kind === 'raise') odds = 0.3
+      else odds = dist > 90 ? 0.35 : 0
       if (chance(odds * (0.5 + a))) return { kind: 'special', frames: 30, attack: 'lk' }
+    }
+    // characters whose light attack is a throw (the VC's cash) use it at mid range
+    if (self.char.moves.standLK.spawn && dist > 50 && dist < 150 && chance(0.2 * (0.5 + a))) {
+      return { kind: 'attack', frames: 24, attack: 'lk' }
     }
     if (dist > 110) {
       if (chance(0.12 * a)) return { kind: 'jumpIn', frames: 45 }

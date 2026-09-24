@@ -25,7 +25,7 @@ export function TitleOverlay(props: {
       <button className="start blink" onClick={props.onStart}>
         PRESS ENTER
       </button>
-      <p className="build">4 EMPLOYEES · 4 ROOMS · 1 PROMOTION</p>
+      <p className="build">6 EMPLOYEES · 5 ROOMS · 1 VC</p>
     </div>
   )
 }
@@ -48,8 +48,15 @@ export function ResultOverlay(props: {
   onChange: () => void
   onQuit: () => void
 }) {
-  const { winner, wins } = props.result
-  const title = winner === 0 ? 'YOU GOT PROMOTED' : winner === 1 ? 'YOU GOT LAID OFF' : 'NOBODY WINS'
+  const { winner, wins, bonus } = props.result
+  const title =
+    bonus === 'won'
+      ? 'FUNDED! YOU ARE THE CEO'
+      : winner === 0
+        ? 'YOU GOT PROMOTED'
+        : winner === 1
+          ? 'YOU GOT LAID OFF'
+          : 'NOBODY WINS'
   return (
     <div className="overlay dim">
       <div className="panel">
@@ -57,6 +64,8 @@ export function ResultOverlay(props: {
         <p className="score">
           {wins[0]} - {wins[1]}
         </p>
+        {bonus === 'won' && <p className="bonus-line">YOU BEAT THE VC. SERIES A CLOSED.</p>}
+        {bonus === 'lost' && <p className="bonus-line">THE VC PASSED... BUT YOU'RE STILL PROMOTED.</p>}
         <button onClick={props.onRematch}>REMATCH · ENTER</button>
         <button onClick={props.onChange}>CHANGE FIGHTER · S</button>
         <button onClick={props.onQuit}>TITLE · ESC</button>

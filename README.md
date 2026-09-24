@@ -49,11 +49,16 @@ Directions in special moves are relative to where you face (→ = forward).
 | --------- | ----------------- | ----------------------------------------- | ----- |
 | HR LADY   | legal folder, stilettos | **Formal Complaint** `← → X`: opens the folder, a complaint flies into the face | long reach, zoning |
 | DEVELOPER | mechanical keyboard | **Incident Declared** `↓ ↓ C`: SEV-1, the office turns red, the opponent loses health (jump to dodge; hit him while he types to cancel it) | slow, tanky, hits hard |
-| SALES REP | brick phone       | **Mega Bullshit** `→ → C`: a cloud of pure bullshit from his mouth blows the opponent (and their projectiles) away | fast, light hits |
-| INTERN    | none, just kicks  | **Coffee Splash** `↓ → X`: throws a hot coffee | all-rounder |
+| PRODUCT MANAGER | laptop | **New Requirement** `← → C`: a sticky ticket in the face; scope creep halves the victim's speed for 3 s | quick, annoying |
+| ARCHITECT | a whole whiteboard | **Ivory Tower** `↓ ← X`: a shadow marks the opponent's spot, then a stack of API/SVC/DB boxes crashes down (walk out!) | slow, huge reach |
+| SALES REP | brick phone       | **Mega Bullshit** `→ → C`: a cloud of pure bullshit blows the opponent (and their projectiles) away | fast, light hits |
+| PINGU THE INTERN | none, just kicks | **Coffee Splash** `↓ → X`: throws a hot coffee | eager but weak |
+| THE VC (secret boss) | cash, lots of it | **Raise** `↓ ↓ X`: money rains from the ceiling, every bill hurts | big, throws cash constantly |
 
 Each special recharges (gauge under the health bar, "SPECIAL" when ready).
-A new, random opponent steps in at every round.
+A new, random opponent steps in at every round, and the room is picked at random.
+Win the match **2-0** and the VC shows up for a bonus round in the boss's office:
+beat him and you're funded (CEO ending); lose and you're still promoted.
 
 ## The rooms
 
@@ -63,6 +68,7 @@ A new, random opponent steps in at every round.
 | Cafeteria     | WORK HARD, PLAY HARDER |
 | Meeting Room  | DREAM BIG · FULL SPEED NO BRAKES |
 | Boss's Office | WIN OR DIE |
+| Cowork Café   | DO WHAT YOU LOVE (neon) |
 
 ## How it's built
 
@@ -102,6 +108,7 @@ push-back, hit level `mid / low / overhead`, hitbox).
 - [x] **Phase 0**: project setup, pixel-perfect canvas, fixed timestep, input
 - [x] **Phase 1**: generic fighter, CPU opponent, rounds, HUD, office stage
 - [x] **Phase 2**: HR Lady, Developer, Sales Rep with weapons + one special each, character & room select, VS screen, 4 rooms with slogans
-- [ ] **Phase 3**: the Executive and the Accountant
+- [x] **Phase 3**: Product Manager, Architect, the VC bonus boss, the Cowork Café
+- [ ] **Phase 3b**: the Executive and the Accountant
 - [ ] **Phase 4**: sound effects and chiptune music, more juice (hit flashes, camera zoom)
 - [ ] **Phase 5**: local 2 players, gamepad and touch controls, longer combos

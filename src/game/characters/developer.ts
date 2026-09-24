@@ -156,7 +156,7 @@ export const developer: CharacterDef = {
     skirt: false,
     belly: 9,
     shoes: 'sneakers',
-    glasses: true,
+    glasses: 'normal',
     beard: true,
     lipstick: false,
     grin: false,

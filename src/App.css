@@ -231,7 +231,7 @@ kbd {
 
 .cards {
   display: flex;
-  gap: calc(var(--px) * 6);
+  gap: calc(var(--px) * 3);
 }
 
 .card {
@@ -240,21 +240,25 @@ kbd {
   flex-direction: column;
   align-items: center;
   gap: calc(var(--px) * 2);
-  width: calc(var(--px) * 74);
-  padding: calc(var(--px) * 3) 0 calc(var(--px) * 4);
+  width: calc(var(--px) * 58);
+  padding: calc(var(--px) * 3) 0 calc(var(--px) * 3);
+  overflow: hidden;
   background: #1b1f3a;
   box-shadow: 0 0 0 calc(var(--px) * 1) #3a3a5c;
 }
 
 .card img {
+  flex: none;
   width: calc(var(--px) * 64);
   height: calc(var(--px) * 100);
   image-rendering: pixelated;
-  margin-top: calc(var(--px) * -24);
+  margin: calc(var(--px) * -26) calc(var(--px) * -3) 0;
 }
 
 .card-name {
-  font-size: calc(var(--px) * 6);
+  min-height: calc(var(--px) * 12);
+  font-size: calc(var(--px) * 5);
+  line-height: 1.2;
   color: #aab0d0;
 }
 
@@ -506,4 +510,10 @@ kbd {
   .vs-side {
     animation: none;
   }
+}
+
+.bonus-line {
+  margin: 0;
+  font-size: calc(var(--px) * 6);
+  color: #5fe08a;
 }

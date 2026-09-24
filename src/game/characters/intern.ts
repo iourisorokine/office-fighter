@@ -1,8 +1,8 @@
 import { defaultPoses } from '../fighter/poses'
 import type { CharacterDef, MoveDef, Palette } from '../types'
-import { baseMoves } from './common'
+import { baseMoves, tweak } from './common'
 
-/** THE INTERN — unpaid, over-caffeinated, all kicks. The balanced all-rounder. */
+/** PINGU THE INTERN — unpaid, over-caffeinated, all kicks. Eager, but a bit weak. */
 
 const coffeeSplash: MoveDef = {
   id: 'coffeeSplash',
@@ -100,10 +100,10 @@ const palettes: Palette[] = [
 
 export const intern: CharacterDef = {
   id: 'intern',
-  name: 'INTERN',
+  name: 'PINGU THE INTERN',
   title: 'The Unpaid Intern',
   bio: 'Runs on free coffee and hope. Quick kicks, no fear, no salary.',
-  stats: { health: 105, power: 3, walkF: 1.7, walkB: 1.3, jumpV: 5.4, jumpVX: 1.9 },
+  stats: { health: 105, power: 2, walkF: 1.5, walkB: 1.2, jumpV: 5.4, jumpVX: 1.8 },
   body: {
     thigh: 15,
     shin: 15,
@@ -126,7 +126,7 @@ export const intern: CharacterDef = {
     skirt: false,
     belly: 0,
     shoes: 'flat',
-    glasses: false,
+    glasses: 'none',
     beard: false,
     lipstick: false,
     grin: false,
@@ -136,7 +136,15 @@ export const intern: CharacterDef = {
   hurtHalfW: 12,
   palettes,
   poses: defaultPoses,
-  moves: baseMoves,
+  // a little less punch than everyone else
+  moves: {
+    standLK: tweak(baseMoves.standLK, { damage: 5 }),
+    standHK: tweak(baseMoves.standHK, { damage: 12 }),
+    crouchLK: tweak(baseMoves.crouchLK, { damage: 5 }),
+    crouchHK: tweak(baseMoves.crouchHK, { damage: 11 }),
+    airLK: tweak(baseMoves.airLK, { damage: 7 }),
+    airHK: tweak(baseMoves.airHK, { damage: 10 }),
+  },
   special: {
     move: coffeeSplash,
     seq: ['D', 'F'],

@@ -152,7 +152,7 @@ export const hrLady: CharacterDef = {
     skirt: true,
     belly: 0,
     shoes: 'heels',
-    glasses: true,
+    glasses: 'normal',
     beard: false,
     lipstick: true,
     grin: false,

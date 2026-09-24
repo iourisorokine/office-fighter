@@ -1,5 +1,6 @@
 import { bossLights, createBossOffice } from './bossOffice'
 import { createCafeteria } from './cafeteria'
+import { cafeAmbient, createCoworkCafe } from './coworkCafe'
 import { createCubicles } from './cubicles'
 import { fluorescent, type Ctx } from './kit'
 import { createMeetingRoom } from './meeting'
@@ -31,6 +32,7 @@ export const STAGES: StageDef[] = [
     ambient: (c, f) => fluorescent(c, f, [36, 312]),
   },
   { id: 'boss', name: "BOSS'S OFFICE", slogans: ['WIN OR DIE'], create: createBossOffice, ambient: bossLights },
+  { id: 'cowork', name: 'COWORK CAFE', slogans: ['DO WHAT YOU LOVE'], create: createCoworkCafe, ambient: cafeAmbient },
 ]
 
 const cache = new Map<string, HTMLCanvasElement>()

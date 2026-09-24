@@ -1,0 +1,185 @@
+import { defaultPoses } from '../fighter/poses'
+import type { CharacterDef, MoveDef, Palette } from '../types'
+import { baseMoves, specialMove, standLegs, tweak } from './common'
+
+/**
+ * THE PRODUCT MANAGER — purple bob, huge round glasses, striped sweater,
+ * skirt over bright tights. Hits with her laptop and throws new requirements
+ * at you: a sticky ticket in the face that slows you down (scope creep).
+ */
+
+const laptopJab: MoveDef = {
+  id: 'laptopJab',
+  name: 'Quick Sync',
+  startup: 5,
+  active: 3,
+  recovery: 10,
+  damage: 6,
+  hitstun: 14,
+  blockstun: 10,
+  pushHit: 2.5,
+  pushBlock: 3,
+  hitstop: 7,
+  level: 'mid',
+  hitbox: { x0: 16, y0: 34, x1: 38, y1: 52 },
+  hurtExt: { x0: 12, y0: 36, x1: 32, y1: 50 },
+  poses: {
+    startup: { hip: [-1, 27], lean: -4, ...standLegs, nearArm: { ik: [5, 44] }, farArm: { ik: [10, 42] }, prop: { angle: 150 } },
+    active: { hip: [3, 27], lean: 10, face: 'shout', ...standLegs, nearArm: { a: [90, 92] }, farArm: { ik: [8, 40] }, prop: { angle: 95, open: true } },
+    recover: { hip: [1, 27], lean: 6, ...standLegs, nearArm: { ik: [12, 42] }, farArm: { ik: [10, 42] }, prop: { angle: 110 } },
+  },
+}
+
+const roadmapSlam: MoveDef = {
+  id: 'roadmapSlam',
+  name: 'Roadmap Slam',
+  startup: 9,
+  active: 4,
+  recovery: 18,
+  damage: 12,
+  hitstun: 19,
+  blockstun: 14,
+  pushHit: 4,
+  pushBlock: 4,
+  hitstop: 11,
+  heavy: true,
+  level: 'mid',
+  hitbox: { x0: 14, y0: 18, x1: 40, y1: 52 },
+  hurtExt: { x0: 10, y0: 20, x1: 34, y1: 46 },
+  poses: {
+    startup: { hip: [-2, 28], lean: -14, ...standLegs, nearArm: { a: [190, 205] }, farArm: { a: [160, 180] }, prop: { angle: 215 } },
+    active: { hip: [3, 26], lean: 20, face: 'shout', ...standLegs, nearArm: { a: [115, 120] }, farArm: { a: [95, 110] }, prop: { angle: 125 } },
+    recover: { hip: [2, 25], lean: 22, ...standLegs, nearArm: { a: [70, 60] }, farArm: { a: [60, 50] }, prop: { angle: 70 } },
+  },
+}
+
+const newRequirement = specialMove({
+  id: 'newRequirement',
+  name: 'New Requirement',
+  startup: 11,
+  active: 10,
+  recovery: 16,
+  spawn: { frame: 11, kind: 'requirement' },
+  poses: {
+    startup: { hip: [-1, 27], lean: -8, ...standLegs, nearArm: { ik: [8, 46] }, farArm: { a: [-60, -20] }, prop: { angle: 120 } },
+    active: {
+      hip: [3, 26],
+      lean: 14,
+      face: 'shout',
+      nearLeg: { ik: [-11, 2] },
+      farLeg: { ik: [10, 2] },
+      nearArm: { ik: [6, 40] },
+      farArm: { a: [95, 95] },
+      prop: { angle: 150, open: true },
+    },
+    recover: { hip: [1, 27], lean: 6, ...standLegs, nearArm: { ik: [10, 42] }, farArm: { a: [80, 70] } },
+  },
+})
+
+const base = {
+  outline: '#1a1020',
+  eye: '#e8f8ff',
+  belt: '#1a1020',
+  tie: '#000000',
+  tieShade: '#000000',
+  prop: '#b8c0cc',
+  propShade: '#7a8290',
+  propB: '#5fd8ff',
+}
+
+const palettes: Palette[] = [
+  {
+    ...base,
+    id: 'pm-a',
+    skin: '#f4c8a0',
+    skinShade: '#c89468',
+    hair: '#8a3ad8',
+    hairShade: '#5a1e98',
+    top: '#ffae1e',
+    topShade: '#c87a10',
+    jacket: '#2a4a6a',
+    jacketShade: '#1a3048',
+    legs: '#1fb8a8',
+    legsShade: '#127a70',
+    shoe: '#ff5a8a',
+    shoeShine: '#c03060',
+    accent: '#d62828',
+    propDark: '#ff5a8a',
+  },
+  {
+    ...base,
+    id: 'pm-b',
+    skin: '#9a6440',
+    skinShade: '#6a4226',
+    hair: '#1fb8a8',
+    hairShade: '#127a70',
+    top: '#5fe08a',
+    topShade: '#2fa05a',
+    jacket: '#6a2a8a',
+    jacketShade: '#48185e',
+    legs: '#ffae1e',
+    legsShade: '#c87a10',
+    shoe: '#f4f4ee',
+    shoeShine: '#b8b8c0',
+    accent: '#1f3b8c',
+    propDark: '#ffe135',
+  },
+]
+
+export const productManager: CharacterDef = {
+  id: 'pm',
+  name: 'PRODUCT MANAGER',
+  title: 'Owner of Everything, Boss of Nobody',
+  bio: 'Has a framework for everything and a sticky note for the rest. The roadmap is final (until Tuesday).',
+  stats: { health: 98, power: 3, walkF: 1.8, walkB: 1.4, jumpV: 5.6, jumpVX: 2 },
+  body: {
+    thigh: 14,
+    shin: 14,
+    upperArm: 10,
+    foreArm: 9,
+    torso: 19,
+    neck: 3,
+    headR: 9.5,
+    shoulderW: 17,
+    hipW: 15,
+    thighW: 7.5,
+    shinW: 6,
+    armW: 5.5,
+    foreW: 4.5,
+  },
+  look: {
+    hair: 'bob',
+    top: 'sweater',
+    stripes: true,
+    tie: false,
+    skirt: true,
+    belly: 0,
+    shoes: 'sneakers',
+    glasses: 'huge',
+    beard: false,
+    lipstick: true,
+    grin: false,
+    logo: false,
+    prop: 'laptop',
+  },
+  hurtHalfW: 11,
+  palettes,
+  poses: defaultPoses,
+  moves: {
+    ...baseMoves,
+    standLK: laptopJab,
+    standHK: roadmapSlam,
+    crouchLK: tweak(baseMoves.crouchLK, { name: 'Sprint Kick' }),
+    crouchHK: tweak(baseMoves.crouchHK, { name: 'Backlog Sweep' }),
+    airLK: tweak(baseMoves.airLK, { name: 'Pivot' }),
+    airHK: tweak(baseMoves.airHK, { name: 'Stretch Goal' }),
+  },
+  special: {
+    move: newRequirement,
+    seq: ['B', 'F'],
+    button: 'hk',
+    cooldown: 110,
+    label: '← → C',
+    description: 'A brand new requirement, straight in the face. Scope creep: the victim moves at half speed for a while.',
+  },
+}

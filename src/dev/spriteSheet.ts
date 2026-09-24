@@ -1,4 +1,4 @@
-import { ROSTER } from '../game/characters'
+import { BOSS, ROSTER } from '../game/characters'
 import { SPR_H, SPR_OX, SPR_OY, SPR_W, spriteFor } from '../game/render/puppet'
 import type { CharacterDef, Pose } from '../game/types'
 
@@ -22,7 +22,7 @@ function posesOf(c: CharacterDef): [string, Pose][] {
 const SCALE = 3
 const COLS = 12
 const canvas = document.getElementById('sheet') as HTMLCanvasElement
-const chars = ROSTER
+const chars = [...ROSTER, BOSS]
 const rows: { c: CharacterDef; pal: number; poses: [string, Pose][] }[] = []
 for (const c of chars) for (let pal = 0; pal < 1; pal++) rows.push({ c, pal, poses: posesOf(c) })
 const cellW = SPR_W

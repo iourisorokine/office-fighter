@@ -1,5 +1,5 @@
 import type { Difficulty } from './ai/CpuController'
-import { ROSTER, characterById } from './characters'
+import { BOSS, ROSTER, characterById } from './characters'
 import { FLOOR_Y, VIEW_H, VIEW_W } from './constants'
 import type { Fighter } from './fighter/Fighter'
 import { KeyboardInput } from './input'
@@ -8,7 +8,7 @@ import { Match, type MatchResult } from './Match'
 import { drawEffects, drawShadow } from './render/effects'
 import { drawAnnouncer, drawHud } from './render/hud'
 import { SPR_OX, SPR_OY, spriteFor } from './render/puppet'
-import { drawIncidentOverlay, drawProjectiles, drawSticker } from './render/specialsFx'
+import { drawIncidentOverlay, drawProjectiles, drawSticker, drawTowers } from './render/specialsFx'
 import { STAGES, stageById, stageCanvas } from './render/stages'
 
 export interface MatchSetup {
@@ -57,8 +57,9 @@ export class Game {
   /** CPU vs CPU demo running behind the title and select screens. */
   startAttract() {
     this.paused = false
-    const a = pick(ROSTER)
-    const b = pick(ROSTER.filter((c) => c !== a))
+    const everyone = [...ROSTER, BOSS]
+    const a = pick(everyone)
+    const b = pick(everyone.filter((c) => c !== a))
     this.match = new Match({
       mode: 'attract',
       difficulty: 'hard',
@@ -78,6 +79,7 @@ export class Game {
       difficulty: setup.difficulty,
       chars: [characterById(setup.p1), characterById(setup.cpu)],
       rotatePool: ROSTER,
+      boss: { char: BOSS, stageId: 'boss' },
       stageId: setup.stageId,
       keyboard: this.keyboard,
       onEnd: (r) => this.cb.onMatchEnd?.(r),
@@ -137,6 +139,7 @@ export class Game {
         this.drawFighter(f, m)
         drawSticker(ctx, f)
       }
+      drawTowers(ctx, m.towers)
       drawProjectiles(ctx, m.projectiles)
       drawEffects(ctx, m.effects)
       if (m.incident) drawIncidentOverlay(ctx, m.incident)

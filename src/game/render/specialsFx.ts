@@ -1,6 +1,6 @@
 import { FLOOR_Y, VIEW_H, VIEW_W } from '../constants'
 import type { Fighter } from '../fighter/Fighter'
-import { INCIDENT_END, INCIDENT_WARNING, type Incident, type Projectile } from '../specials'
+import { INCIDENT_END, INCIDENT_WARNING, TOWER_HALF_W, TOWER_LAND, type Incident, type Projectile, type Tower } from '../specials'
 import { drawText } from './font'
 
 type Ctx = CanvasRenderingContext2D
@@ -107,11 +107,82 @@ function drawBullshit(ctx: Ctx, p: Projectile) {
   }
 }
 
+/** A yellow "NEW REQ" sticky ticket, spinning a little. */
+function drawRequirement(ctx: Ctx, p: Projectile) {
+  const x = Math.round(p.x)
+  const y = Math.round(FLOOR_Y - p.y)
+  const tilt = Math.floor(p.t / 4) % 2
+  rect(ctx, x - 7, y - 7 + tilt, 14, 14, '#1a1020')
+  rect(ctx, x - 6, y - 6 + tilt, 12, 12, '#ffe135')
+  rect(ctx, x - 6, y - 6 + tilt, 12, 3, '#ffb81e')
+  rect(ctx, x - 4, y - 1 + tilt, 8, 1, '#8a6a10')
+  rect(ctx, x - 4, y + 1 + tilt, 6, 1, '#8a6a10')
+  rect(ctx, x - 4, y + 3 + tilt, 7, 1, '#8a6a10')
+  const dir = Math.sign(p.vx)
+  for (let i = 1; i <= 3; i++) rect(ctx, x - dir * (8 + i * 5), y + ((i * 3) % 5) - 2, 3, 1, '#fff6a8')
+}
+
+function drawBill(ctx: Ctx, x: number, y: number, t: number, big = false) {
+  const flip = Math.floor(t / 5) % 2
+  const w = big ? 12 : flip ? 10 : 7
+  const h = big ? 7 : flip ? 5 : 6
+  rect(ctx, x - w / 2 - 1, y - h / 2 - 1, w + 2, h + 2, '#123a1a')
+  rect(ctx, x - w / 2, y - h / 2, w, h, '#6cc05a')
+  rect(ctx, x - 1, y - h / 2 + 1, 2, h - 2, '#d8f0c0')
+  if (big) rect(ctx, x - w / 2 + 1, y - h / 2 + 1, 2, 2, '#1e5a2a')
+}
+
 export function drawProjectiles(ctx: Ctx, list: readonly Projectile[]) {
   for (const p of list) {
     if (p.kind === 'coffee') drawCoffee(ctx, p)
     else if (p.kind === 'complaint') drawComplaint(ctx, p)
+    else if (p.kind === 'requirement') drawRequirement(ctx, p)
+    else if (p.kind === 'cash') {
+      // a fanned wad of bills
+      const x = Math.round(p.x)
+      const y = Math.round(FLOOR_Y - p.y)
+      drawBill(ctx, x - 4, y + 2, p.t, true)
+      drawBill(ctx, x, y - 1, p.t + 3, true)
+      drawBill(ctx, x + 4, y + 1, p.t + 5, true)
+    } else if (p.kind === 'bill') drawBill(ctx, Math.round(p.x), Math.round(FLOOR_Y - p.y), p.t)
     else drawBullshit(ctx, p)
+  }
+}
+
+/** Ivory Tower: a warning shadow, then a stack of architecture boxes falls from the sky. */
+export function drawTowers(ctx: Ctx, towers: readonly Tower[]) {
+  for (const tw of towers) {
+    const x = Math.round(tw.x)
+    if (tw.t < TOWER_LAND) {
+      const k = Math.min(1, tw.t / 30)
+      const w = Math.round(TOWER_HALF_W * (0.4 + 0.6 * k))
+      ctx.fillStyle = `rgba(10, 10, 30, ${0.25 + 0.3 * k})`
+      ctx.fillRect(x - w, FLOOR_Y - 2, w * 2, 5)
+      if (Math.floor(tw.t / 5) % 2 === 0) {
+        rect(ctx, x - w - 2, FLOOR_Y - 3, 2, 7, '#ff4a2a')
+        rect(ctx, x + w, FLOOR_Y - 3, 2, 7, '#ff4a2a')
+      }
+    }
+    // the stack falls in the last 12 frames before landing, then sits there and fades
+    const fall = tw.t < TOWER_LAND - 12 ? null : Math.max(0, (TOWER_LAND - tw.t) / 12)
+    if (fall === null) continue
+    if (tw.t > TOWER_LAND + 20 && tw.t % 4 < 2) continue
+    const drop = Math.round(fall * 190)
+    const labels = ['API', 'SVC', 'DB']
+    labels.forEach((label, i) => {
+      const bw = 34 - i * 4
+      const bh = 16
+      const by = FLOOR_Y - (i + 1) * (bh + 4) - drop
+      rect(ctx, x - bw / 2 - 1, by - 1, bw + 2, bh + 2, '#10101c')
+      rect(ctx, x - bw / 2, by, bw, bh, i === 2 ? '#3a7bd5' : '#f4f4ee')
+      rect(ctx, x - bw / 2, by + bh - 3, bw, 3, i === 2 ? '#2a5aa8' : '#c8ccd4')
+      drawText(ctx, label, x, by + 4, { color: i === 2 ? '#ffffff' : '#10101c', align: 'center' })
+      if (i < 2) {
+        // arrow to the next box
+        rect(ctx, x, by - 4, 1, 4, '#10101c')
+        rect(ctx, x - 1, by - 2, 3, 1, '#10101c')
+      }
+    })
   }
 }
 
@@ -121,10 +192,11 @@ export function drawSticker(ctx: Ctx, f: Fighter) {
   const [hx, hy] = f.headPos()
   const x = Math.round(hx + f.facing * 3)
   const y = Math.round(FLOOR_Y - hy)
+  const ticket = f.stickerKind === 'ticket'
   rect(ctx, x - 7, y - 8, 14, 16, '#1a1020')
-  rect(ctx, x - 6, y - 7, 12, 14, '#ffffff')
-  for (let i = 0; i < 3; i++) rect(ctx, x - 4, y - 5 + i * 2, 8, 1, '#8a8aa0')
-  rect(ctx, x - 4, y + 2, 8, 3, '#d62828')
+  rect(ctx, x - 6, y - 7, 12, 14, ticket ? '#ffe135' : '#ffffff')
+  for (let i = 0; i < 3; i++) rect(ctx, x - 4, y - 5 + i * 2, 8, 1, ticket ? '#8a6a10' : '#8a8aa0')
+  rect(ctx, x - 4, y + 2, 8, 3, ticket ? '#ffb81e' : '#d62828')
 }
 
 /** SEV-1: everything turns red, sirens flash, then the damage lands. */

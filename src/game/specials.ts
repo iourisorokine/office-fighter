@@ -4,10 +4,11 @@ import type { HitProps, SpawnKind } from './types'
 
 /**
  * Special-move objects that live outside the fighters: projectiles
- * (coffee cup, formal complaint, mega bullshit) and the SEV-1 incident.
+ * (coffee cup, formal complaint, mega bullshit, new requirement, cash),
+ * and area effects (SEV-1 incident, ivory tower, the VC's raise).
  */
 
-export type ProjectileKind = Exclude<SpawnKind, 'incident'>
+export type ProjectileKind = Exclude<SpawnKind, 'incident' | 'tower' | 'raise'> | 'bill'
 
 export interface Projectile {
   id: number
@@ -17,6 +18,8 @@ export interface Projectile {
   /** centre height above the floor */
   y: number
   vx: number
+  /** only falling bills move vertically */
+  vy: number
   w: number
   h: number
   t: number
@@ -36,6 +39,30 @@ interface ProjectileDef {
 }
 
 export const PROJECTILES: Record<ProjectileKind, ProjectileDef> = {
+  requirement: {
+    speed: 3,
+    w: 14,
+    h: 14,
+    life: 150,
+    at: [28, 48],
+    hit: { damage: 9, hitstun: 20, blockstun: 12, pushHit: 3, pushBlock: 3.5, hitstop: 9, level: 'mid', chip: 1 },
+  },
+  cash: {
+    speed: 4.4,
+    w: 10,
+    h: 8,
+    life: 30,
+    at: [24, 46],
+    hit: { damage: 4, hitstun: 12, blockstun: 8, pushHit: 2, pushBlock: 2.5, hitstop: 6, level: 'mid' },
+  },
+  bill: {
+    speed: 0,
+    w: 10,
+    h: 6,
+    life: 200,
+    at: [0, 0],
+    hit: { damage: 2, hitstun: 10, blockstun: 6, pushHit: 1, pushBlock: 1, hitstop: 4, level: 'overhead', chip: 1 },
+  },
   coffee: {
     speed: 3.4,
     w: 10,
@@ -85,6 +112,7 @@ export function spawnProjectile(kind: ProjectileKind, owner: 0 | 1, f: Fighter):
     x: f.x + f.facing * d.at[0],
     y: f.y + d.at[1],
     vx: f.facing * d.speed,
+    vy: 0,
     w: kind === 'bullshit' ? 16 : d.w,
     h: kind === 'bullshit' ? 24 : d.h,
     t: 0,
@@ -94,9 +122,34 @@ export function spawnProjectile(kind: ProjectileKind, owner: 0 | 1, f: Fighter):
   }
 }
 
+/** A banknote falling from the ceiling (the VC's raise). */
+export function spawnBill(owner: 0 | 1, x: number): Projectile {
+  const d = PROJECTILES.bill
+  return {
+    id: nextId++,
+    owner,
+    kind: 'bill',
+    x,
+    y: 200,
+    vx: (Math.random() - 0.5) * 0.8,
+    vy: -2.2 - Math.random() * 0.8,
+    w: d.w,
+    h: d.h,
+    t: Math.floor(Math.random() * 20),
+    life: 400,
+    hit: d.hit,
+    dead: false,
+  }
+}
+
 export function moveProjectile(p: Projectile) {
   p.t++
   p.x += p.vx
+  if (p.kind === 'bill') {
+    p.y += p.vy
+    p.x += Math.sin(p.t * 0.2) * 0.6
+    if (p.y < 2) p.dead = true
+  }
   if (p.kind === 'bullshit') {
     // the cloud swells as it travels
     const k = Math.min(1, p.t / 18)
@@ -131,3 +184,36 @@ export const INCIDENT_HIT: HitProps = {
   level: 'unblockable',
   heavy: true,
 }
+
+/** The Architect's special: a shadow marks the spot, then a stack of diagram boxes lands there. */
+export interface Tower {
+  owner: 0 | 1
+  x: number
+  t: number
+  fired: boolean
+}
+
+export const TOWER_LAND = 50
+export const TOWER_END = 85
+export const TOWER_HALF_W = 20
+
+export const TOWER_HIT: HitProps = {
+  damage: 16,
+  hitstun: 0,
+  blockstun: 0,
+  pushHit: 0,
+  pushBlock: 0,
+  hitstop: 12,
+  level: 'unblockable',
+  heavy: true,
+  knockdown: true,
+  launch: [1.2, 3],
+}
+
+/** The VC's special: it rains money for a while. */
+export interface Rain {
+  owner: 0 | 1
+  t: number
+}
+
+export const RAIN_DURATION = 120

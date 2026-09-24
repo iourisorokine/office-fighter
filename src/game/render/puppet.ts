@@ -309,12 +309,13 @@ function drawArm(c: Ctx, shoulder: Vec2, limb: Limb, far: boolean) {
   const upper = capsule(shoulder, elbow, body.armW / 2)
   const fore = capsule(elbow, hand, body.foreW / 2)
   const bb = boundsOf([shoulder, elbow, hand], 5)
+  const stripes = look.stripes && !far ? (_x: number, y: number) => (Math.floor(y / 2.5) % 2 === 0 ? ACC : null) : undefined
   if (look.top === 'tshirt') {
     // short sleeves: bare forearms
     buf.paint(fore, bb, far ? SKIN_S : SKIN, far ? null : SKIN_S)
-    buf.paint(upper, bb, far ? TOP_S : TOP, far ? null : TOP_S)
+    buf.paint(upper, bb, far ? TOP_S : TOP, far ? null : TOP_S, 1, stripes)
   } else {
-    buf.paint(union(upper, fore), bb, far ? sleeveS : sleeve, far ? null : sleeveS)
+    buf.paint(union(upper, fore), bb, far ? sleeveS : sleeve, far ? null : sleeveS, 1, stripes)
   }
   const dir = norm(sub(hand, elbow))
   const fist = add(hand, mul(dir, 1))
@@ -330,9 +331,59 @@ function drawProp(c: Ctx, fist: Vec2, forearm: Vec2, pose: Pose) {
   const pp = pose.prop ?? {}
   if (look.prop === 'none' || pp.hidden) return
   // neutral poses: each prop has its own resting angle (so it doesn't hide the face)
-  const REST: Record<string, number> = { folder: 12, keyboard: 55, phone: 165 }
+  const REST: Record<string, number> = { folder: 12, keyboard: 55, phone: 165, laptop: 20, whiteboard: 4, cash: 70 }
   const d = pp.angle !== undefined ? dirOf(pp.angle) : pp.follow ? forearm : dirOf(REST[look.prop])
   const n = perp(d)
+  if (look.prop === 'laptop' && !pp.open) {
+    // closed laptop: a slab with a glowing edge and a sticker
+    const pts = box(add(fist, mul(d, -2)), d, 17, 2.8)
+    buf.paint(polygon(pts), boundsOf(pts, 2), PROP, PROP_S, 1, (x, y) => {
+      const rel = sub([x, y], fist)
+      const along = dot(rel, d) + 2
+      const across = dot(rel, n)
+      if (across < -1.2) return PROP_S
+      if (along > 9 && along < 12 && across > -0.5) return ACC
+      return null
+    })
+    return
+  }
+  if (look.prop === 'laptop') {
+    // open laptop: keyboard deck + screen at an angle, glowing inside
+    const hinge = add(fist, mul(d, 1))
+    const deck = box(hinge, d, 15, 1.4)
+    buf.paint(polygon(deck), boundsOf(deck, 2), PROP, PROP_S, 1)
+    const e = norm(add(mul(d, Math.cos(105 * D2R)), mul(n, Math.sin(105 * D2R))))
+    const lid = box(hinge, e, 13, 1.4)
+    buf.paint(polygon(lid), boundsOf(lid, 2), PROP, PROP_S, 1)
+    for (let a = 2; a < 12; a++) buf.dot(add(add(hinge, mul(e, a)), mul(perp(e), -1.6)), PROP_B)
+    buf.dot(add(add(hinge, mul(e, 7)), mul(perp(e), 0.8)), ACC)
+    return
+  }
+  if (look.prop === 'whiteboard') {
+    // a whole whiteboard: aluminium frame, boxes-and-arrows sketch
+    const pts = box(add(fist, mul(d, -3)), d, 30, 11)
+    buf.paint(polygon(pts), boundsOf(pts, 2), PROP_B, null, 1, (x, y) => {
+      const rel = sub([x, y], fist)
+      const along = dot(rel, d) + 3
+      const across = dot(rel, n)
+      if (along < 1.5 || along > 28.5 || Math.abs(across) > 9.5) return PROP
+      const inBox = (a0: number, a1: number, c0: number, c1: number) =>
+        along >= a0 && along <= a1 && across >= c0 && across <= c1 && !(along > a0 + 1 && along < a1 - 1 && across > c0 + 1 && across < c1 - 1)
+      if (inBox(5, 11, 2, 7) || inBox(17, 24, -7, -2)) return PROP_D
+      if (inBox(18, 25, 3, 7)) return ACC
+      if (Math.abs(across - (4.5 - (along - 11) * 0.9)) < 0.6 && along > 11 && along < 17) return PROP_D
+      return null
+    })
+    return
+  }
+  if (look.prop === 'cash') {
+    const pts = box(add(fist, mul(d, -1)), d, 8, 3)
+    buf.paint(polygon(pts), boundsOf(pts, 2), PROP, PROP_S, 1, (x, y) => {
+      const along = dot(sub([x, y], fist), d) + 1
+      return along > 3.2 && along < 4.8 ? PROP_B : null
+    })
+    return
+  }
   if (look.prop === 'folder') {
     // thick legal binder, burgundy with a white label; opened = two panels + flying papers
     if (pp.open) {
@@ -398,7 +449,8 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
   // neck
   const n0 = add(neckBase, mul(hu, -1))
   const n1 = add(neckBase, mul(hu, body.neck + 2))
-  buf.paint(capsule(n0, n1, 2.8), boundsOf([n0, n1], 4), SKIN_S, null)
+  if (look.top === 'turtleneck') buf.paint(capsule(n0, n1, 3.3), boundsOf([n0, n1], 5), TOP, TOP_S)
+  else buf.paint(capsule(n0, n1, 2.8), boundsOf([n0, n1], 4), SKIN_S, null)
 
   // hair behind the head
   if (look.hair === 'bun') {
@@ -429,6 +481,17 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
       hairC = at(-0.8, 1.6)
       hairR = r + 1.6
       region = (lx, ly) => ly > 1.2 - lx * 0.1 || (lx < -2.5 && ly > -5)
+      break
+    case 'bob':
+      // chin-length bob with a straight fringe
+      hairC = at(-0.4, 0.2)
+      hairR = r + 1.5
+      region = (lx, ly) => ly > 2 - lx * 0.05 || (lx < 1.2 && ly > -6.5)
+      break
+    case 'crew':
+      hairC = at(-0.5, 0.8)
+      hairR = r + 0.3
+      region = (lx, ly) => ly > 3.4 - lx * 0.2 || (lx < -4 && ly > -1)
       break
     case 'slick':
       hairC = at(-0.6, 1)
@@ -475,7 +538,7 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
   buf.dot(at(3.5, 2.6), OUT)
   buf.dot(at(4.5, 2.1), OUT)
   buf.dot(at(5.5, 1.6), OUT)
-  if (look.glasses) {
+  if (look.glasses === 'normal') {
     for (let lx = 2; lx <= 6.5; lx += 1) {
       buf.dot(at(lx, 1.6), ACC)
       buf.dot(at(lx, -0.7), ACC)
@@ -485,6 +548,28 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
     buf.dot(at(1, 0.9), ACC)
     buf.dot(at(0, 0.9), ACC)
     if (face !== 'hurt' && face !== 'ko') buf.dot(at(5.5, 0.5), EYE)
+  } else if (look.glasses === 'huge') {
+    // enormous round lenses
+    for (let lx = 0; lx <= 9; lx += 0.5) {
+      for (let ly = -3.5; ly <= 4.5; ly += 0.5) {
+        const d = Math.hypot(lx - 4.6, ly - 0.6)
+        if (d > 2.6 && d <= 3.6) buf.dot(at(lx, ly), ACC)
+      }
+    }
+    for (let lx = -0.5; lx <= 1.5; lx += 1) buf.dot(at(lx, 1.2), ACC)
+    if (face !== 'hurt' && face !== 'ko') {
+      buf.dot(at(3.5, 1.8), EYE)
+      buf.dot(at(4.5, 0.5), OUT)
+      buf.dot(at(5.5, 0.5), OUT)
+    }
+  } else if (look.glasses === 'shades') {
+    for (let lx = 2; lx <= 7.5; lx += 1) {
+      buf.dot(at(lx, 1.5), OUT)
+      buf.dot(at(lx, 0.5), OUT)
+      buf.dot(at(lx - 0.5, -0.5), OUT)
+    }
+    buf.dot(at(6.2, 1.3), EYE)
+    for (let lx = -0.5; lx <= 1.5; lx += 1) buf.dot(at(lx, 1.2), OUT)
   }
   // nose
   buf.dot(at(r + 0.2, -0.8), SKIN)
@@ -542,8 +627,9 @@ function drawTorso(c: Ctx, hip: Vec2, lean: number) {
     add(add(hip, mul(u, body.torso * 0.45)), mul(p, hw + 0.5)),
   ])
   const jacket = look.top === 'jacket'
-  const base = jacket ? JACK : TOP
-  const shade = jacket ? JACK_S : TOP_S
+  const vest = look.top === 'vest'
+  const base = jacket || vest ? JACK : TOP
+  const shade = jacket || vest ? JACK_S : TOP_S
 
   const zone = (x: number, y: number, shaded: boolean): number | null => {
     const rel = sub([x, y], hip)
@@ -555,6 +641,13 @@ function drawTorso(c: Ctx, hip: Vec2, lean: number) {
       return shaded ? LEGS_S : LEGS
     }
     if (h < 5.5 && !jacket && !look.skirt) return BELT
+    if (vest) {
+      // fleece vest over a shirt: collar and zipper
+      if (h > body.torso - 3.5 && q > sw - 7) return shaded ? TOP_S : TOP
+      if (Math.abs(q - (sw - 3)) < 0.6) return JACK_S
+      return null
+    }
+    if (look.stripes && Math.floor(h / 3) % 2 === 0) return ACC
     if (jacket && vee(x, y, 0)) {
       if (look.tie && tieShape(x, y, 0)) return TIE
       return shaded ? TOP_S : TOP

@@ -137,7 +137,7 @@ export const salesRep: CharacterDef = {
     skirt: false,
     belly: 0,
     shoes: 'flat',
-    glasses: false,
+    glasses: 'none',
     beard: false,
     lipstick: false,
     grin: true,
