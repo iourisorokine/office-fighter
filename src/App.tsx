@@ -6,7 +6,7 @@ import { Game } from './game/Game'
 import type { MatchResult } from './game/Match'
 import { ControlsBar, PauseOverlay, ResultOverlay, TitleOverlay } from './ui/Overlays'
 import { SelectScreen, VersusScreen, type SelectResult } from './ui/SelectScreen'
-import { SIDE_PAD, TouchControls } from './ui/TouchControls'
+import { TouchControls } from './ui/TouchControls'
 import { useIsPortrait, useIsTouch } from './ui/useDevice'
 import { useScreenScale } from './ui/useScreenScale'
 import './App.css'
@@ -24,14 +24,10 @@ export default function App() {
   const [result, setResult] = useState<MatchResult | null>(null)
   const touch = useIsTouch()
   const portrait = useIsPortrait()
-  // phones: controls go under the screen in portrait, beside it in landscape
-  const padLayout = portrait ? 'below' : 'side'
-  const scale = useScreenScale(
-    VIEW_W,
-    VIEW_H,
-    touch ? (portrait ? 330 : 8) : 90,
-    touch ? (portrait ? 8 : 2 * SIDE_PAD) : 24,
-  )
+  // phones: a flat key bar under the screen in portrait; in landscape the
+  // screen takes the whole display and the keys float over its corners
+  const padLayout = portrait ? 'below' : 'float'
+  const scale = useScreenScale(VIEW_W, VIEW_H, touch ? (portrait ? 330 : 0) : 90, touch ? (portrait ? 4 : 0) : 24)
 
   useEffect(() => {
     const game = new Game(canvasRef.current!, {

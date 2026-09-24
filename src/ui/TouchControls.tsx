@@ -34,8 +34,13 @@ function vibrate() {
 
 type Dir = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'
 
-/** 8-way pad: slide your thumb around, diagonals press two arrows at once. */
-function DPad() {
+/**
+ * Four arrow keys laid out like a laptop's (▲ over ◀ ▼ ▶). It is one touch
+ * surface: slide your thumb across it and the pressed keys follow. The empty
+ * spots beside ▲ jump diagonally (↖ ↗), and the seams between ◀ ▼ ▶ press
+ * both neighbours, so ↙ (crouch block) works too.
+ */
+function ArrowKeys() {
   const ref = useRef<HTMLDivElement>(null)
   const active = useRef(new Set<Dir>())
   const [shown, setShown] = useState<Set<Dir>>(new Set())
@@ -50,32 +55,32 @@ function DPad() {
 
   const track = (e: ReactPointerEvent) => {
     const r = ref.current!.getBoundingClientRect()
-    const dx = e.clientX - (r.left + r.width / 2)
-    const dy = e.clientY - (r.top + r.height / 2)
-    const dead = r.width * 0.12
+    const rx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
+    const ry = (e.clientY - r.top) / r.height
     const next = new Set<Dir>()
-    if (Math.hypot(dx, dy) > dead) {
-      // a 45° cone around each axis, so diagonals register both arrows
-      if (Math.abs(dx) > Math.abs(dy) * 0.42) next.add(dx > 0 ? 'ArrowRight' : 'ArrowLeft')
-      if (Math.abs(dy) > Math.abs(dx) * 0.42) next.add(dy > 0 ? 'ArrowDown' : 'ArrowUp')
+    if (ry < 0.5) {
+      next.add('ArrowUp')
+      if (rx < 1 / 3) next.add('ArrowLeft')
+      else if (rx > 2 / 3) next.add('ArrowRight')
+    } else {
+      const seam = 0.06
+      if (rx < 1 / 3 + seam) next.add('ArrowLeft')
+      if (rx > 1 / 3 - seam && rx < 2 / 3 + seam) next.add('ArrowDown')
+      if (rx > 2 / 3 - seam) next.add('ArrowRight')
     }
     apply(next)
   }
 
   const release = () => apply(new Set())
 
-  const arrow = (d: Dir, cls: string, glyph: string) => (
-    <span className={`dpad-arrow ${cls} ${shown.has(d) ? 'on' : ''}`} aria-hidden="true">
-      {glyph}
-    </span>
-  )
+  const lit = (d: Dir) => (shown.has(d) ? 'on' : '')
 
   return (
     <div
       ref={ref}
-      className="dpad"
+      className="arrow-keys"
       role="group"
-      aria-label="Direction pad"
+      aria-label="Arrow keys"
       onPointerDown={(e) => {
         capture(e)
         track(e)
@@ -87,11 +92,12 @@ function DPad() {
       onPointerCancel={release}
       onLostPointerCapture={release}
     >
-      {arrow('ArrowUp', 'up', '▲')}
-      {arrow('ArrowDown', 'down', '▼')}
-      {arrow('ArrowLeft', 'left', '◀')}
-      {arrow('ArrowRight', 'right', '▶')}
-      <span className="dpad-hub" />
+      <span className="key-gap" />
+      <span className={`key ${lit('ArrowUp')}`}>▲</span>
+      <span className="key-gap" />
+      <span className={`key ${lit('ArrowLeft')}`}>◀</span>
+      <span className={`key ${lit('ArrowDown')}`}>▼</span>
+      <span className={`key ${lit('ArrowRight')}`}>▶</span>
     </div>
   )
 }
@@ -114,57 +120,55 @@ function HoldButton(props: { code: string; label: string; sub: string; className
   return (
     <button
       type="button"
-      className={`pad-btn ${props.className} ${on ? 'on' : ''}`}
+      className={`key action ${props.className} ${on ? 'on' : ''}`}
       onPointerDown={down}
       onPointerUp={up}
       onPointerCancel={up}
       onLostPointerCapture={up}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <span className="pad-btn-label">{props.label}</span>
-      <span className="pad-btn-sub">{props.sub}</span>
+      <span className="key-label">{props.label}</span>
+      <span className="key-sub">{props.sub}</span>
     </button>
   )
 }
 
-/** width (px) kept free on each side of the screen for the pads in landscape */
-export const SIDE_PAD = 158
-
 export function TouchControls(props: {
-  layout: 'below' | 'side'
+  layout: 'below' | 'float'
   fighting: boolean
   special: { name: string; label: string } | null
 }) {
+  const sp = props.fighting ? props.special : null
   return (
     <div className={`touch-controls pad-${props.layout}`}>
-      <DPad />
-      <div className="pad-middle">
-        <button type="button" className="pad-small" onClick={() => tapKey('Enter')}>
-          START
+      <div className="action-keys">
+        <button
+          type="button"
+          className="key action sp"
+          disabled={!sp}
+          onPointerDown={() => {
+            if (!sp) return
+            vibrate()
+            window.dispatchEvent(new Event(SPECIAL_EVENT))
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+          aria-label={sp ? `Special move: ${sp.name}` : 'Special move'}
+        >
+          <span className="key-label">SP</span>
+          <span className="key-sub">{sp ? sp.name.toUpperCase() : 'SPECIAL'}</span>
         </button>
-        <button type="button" className="pad-small" onClick={() => tapKey('Escape')} disabled={!props.fighting}>
-          PAUSE
-        </button>
-      </div>
-      <div className="pad-buttons">
-        {props.special && props.fighting && (
-          <button
-            type="button"
-            className="pad-btn sp"
-            onPointerDown={() => {
-              vibrate()
-              window.dispatchEvent(new Event(SPECIAL_EVENT))
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-            aria-label={`Special move: ${props.special.name}`}
-          >
-            <span className="pad-btn-label">SP</span>
-            <span className="pad-btn-sub">{props.special.name.toUpperCase()}</span>
-          </button>
-        )}
         <HoldButton code="KeyX" label="X" sub="LIGHT" className="light" />
         <HoldButton code="KeyC" label="C" sub="HEAVY" className="heavy" />
       </div>
+      <div className="system-keys">
+        <button type="button" className="key small" onClick={() => tapKey('Enter')}>
+          START
+        </button>
+        <button type="button" className="key small" onClick={() => tapKey('Escape')} disabled={!props.fighting}>
+          PAUSE
+        </button>
+      </div>
+      <ArrowKeys />
     </div>
   )
 }
