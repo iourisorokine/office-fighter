@@ -137,6 +137,8 @@ export function TouchControls(props: {
   layout: 'below' | 'float'
   fighting: boolean
   special: { name: string; label: string } | null
+  muted: boolean
+  onMute: () => void
 }) {
   const sp = props.fighting ? props.special : null
   return (
@@ -166,6 +168,9 @@ export function TouchControls(props: {
         </button>
         <button type="button" className="key small" onClick={() => tapKey('Escape')} disabled={!props.fighting}>
           PAUSE
+        </button>
+        <button type="button" className="key small" onClick={props.onMute} aria-label={props.muted ? 'Sound off' : 'Sound on'}>
+          {props.muted ? 'SOUND OFF' : 'SOUND ON'}
         </button>
       </div>
       <ArrowKeys />

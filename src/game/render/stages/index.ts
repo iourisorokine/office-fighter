@@ -4,6 +4,8 @@ import { cafeAmbient, createCoworkCafe } from './coworkCafe'
 import { createCubicles } from './cubicles'
 import { fluorescent, type Ctx } from './kit'
 import { createMeetingRoom } from './meeting'
+import { createBlueprintStudio } from './blueprintStudio'
+import { createServerRoom, serverAmbient } from './serverRoom'
 
 export interface StageDef {
   id: string
@@ -33,6 +35,20 @@ export const STAGES: StageDef[] = [
   },
   { id: 'boss', name: "BOSS'S OFFICE", slogans: ['WIN OR DIE'], create: createBossOffice, ambient: bossLights },
   { id: 'cowork', name: 'COWORK CAFE', slogans: ['DO WHAT YOU LOVE'], create: createCoworkCafe, ambient: cafeAmbient },
+  {
+    id: 'servers',
+    name: 'SERVER ROOM',
+    slogans: ['MOVE FAST AND BREAK THINGS'],
+    create: createServerRoom,
+    ambient: serverAmbient,
+  },
+  {
+    id: 'studio',
+    name: 'BLUEPRINT STUDIO',
+    slogans: ['THINK BIGGER'],
+    create: createBlueprintStudio,
+    ambient: () => {},
+  },
 ]
 
 const cache = new Map<string, HTMLCanvasElement>()

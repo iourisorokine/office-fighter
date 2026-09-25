@@ -1,4 +1,5 @@
 import type { Difficulty } from './ai/CpuController'
+import { audio } from './audio'
 import { BOSS, ROSTER, characterById } from './characters'
 import { FLOOR_Y, VIEW_H, VIEW_W } from './constants'
 import type { Fighter } from './fighter/Fighter'
@@ -17,6 +18,8 @@ export interface MatchSetup {
   cpu: string
   stageId: string
   difficulty: Difficulty
+  /** tower: one opponent in their home room; quick: new opponent and room every round, VC bonus */
+  mode: 'tower' | 'quick'
 }
 
 const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)]
@@ -76,13 +79,15 @@ export class Game {
   startMatch(setup: MatchSetup) {
     this.paused = false
     this.keyboard.clear()
+    const quick = setup.mode === 'quick'
     this.match = new Match({
       mode: 'cpu',
       difficulty: setup.difficulty,
       chars: [characterById(setup.p1), characterById(setup.cpu)],
-      rotatePool: ROSTER,
-      boss: { char: BOSS, stageId: 'boss' },
-      stagePool: STAGES.map((st) => st.id),
+      rotatePool: quick ? ROSTER : undefined,
+      boss: quick ? { char: BOSS, stageId: 'boss' } : undefined,
+      stagePool: quick ? STAGES.map((st) => st.id) : undefined,
+      finalBoss: !quick && setup.cpu === BOSS.id,
       stageId: setup.stageId,
       keyboard: this.keyboard,
       onEnd: (r) => this.cb.onMatchEnd?.(r),
@@ -93,6 +98,7 @@ export class Game {
     if (!this.match || this.match.mode !== 'cpu' || this.paused === p) return
     this.paused = p
     this.keyboard.clear()
+    audio.play('pause')
     this.cb.onPauseChange?.(p)
   }
 
@@ -120,6 +126,12 @@ export class Game {
     this.frame++
     if (this.paused || !this.match) return
     this.match.update()
+    const m = this.match
+    if (m.sounds.length) {
+      // the attract demo behind the menus stays silent
+      if (m.mode === 'cpu') for (const s of new Set(m.sounds)) audio.play(s)
+      m.sounds = []
+    }
   }
 
   private render() {

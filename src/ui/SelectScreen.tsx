@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ROSTER, characterById } from '../game/characters'
 import { portraitURL } from '../game/render/portraits'
-import { STAGES } from '../game/render/stages'
+import { stageById } from '../game/render/stages'
 import type { CharacterDef } from '../game/types'
 
 function Stat(props: { label: string; value: number }) {
@@ -26,30 +26,24 @@ export interface SelectResult {
   stageId: string
 }
 
-/**
- * Pick your employee. The CPU gets a different one at random, and the room
- * is drawn at random too.
- */
-export function SelectScreen(props: { initial?: SelectResult | null; onDone: (r: SelectResult) => void; onBack: () => void }) {
-  const [cursor, setCursor] = useState(() => Math.max(0, ROSTER.findIndex((c) => c.id === props.initial?.p1)))
+/** Pick your employee. What happens next (opponent, room) is up to the caller. */
+export function SelectScreen(props: { initial?: string | null; hint: string; onDone: (p1: string) => void; onBack: () => void; onMove?: () => void }) {
+  const [cursor, setCursor] = useState(() => Math.max(0, ROSTER.findIndex((c) => c.id === props.initial)))
   const chosen = ROSTER[cursor]
 
-  const confirm = (i = cursor) => {
-    const me = ROSTER[i]
-    const others = ROSTER.filter((c) => c !== me)
-    props.onDone({
-      p1: me.id,
-      cpu: others[Math.floor(Math.random() * others.length)].id,
-      stageId: STAGES[Math.floor(Math.random() * STAGES.length)].id,
-    })
-  }
+  const confirm = (i = cursor) => props.onDone(ROSTER[i].id)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return
       const n = ROSTER.length
-      if (e.code === 'ArrowLeft') setCursor((c) => (c + n - 1) % n)
-      else if (e.code === 'ArrowRight') setCursor((c) => (c + 1) % n)
+      if (e.code === 'ArrowLeft') {
+        props.onMove?.()
+        setCursor((c) => (c + n - 1) % n)
+      } else if (e.code === 'ArrowRight') {
+        props.onMove?.()
+        setCursor((c) => (c + 1) % n)
+      }
       else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyX') confirm()
       else if (e.code === 'Escape' || e.code === 'KeyC') props.onBack()
     }
@@ -95,7 +89,7 @@ export function SelectScreen(props: { initial?: SelectResult | null; onDone: (r:
           <Stat label="SPEED" value={speedOf(chosen)} />
         </div>
       </div>
-      <p className="hint">← → CHOOSE · ENTER FIGHT · ESC BACK · RANDOM ROOM, NEW OPPONENT EVERY ROUND</p>
+      <p className="hint">{props.hint}</p>
     </div>
   )
 }
@@ -104,7 +98,7 @@ export function SelectScreen(props: { initial?: SelectResult | null; onDone: (r:
 export function VersusScreen(props: { setup: SelectResult; onDone: () => void }) {
   const a = characterById(props.setup.p1)
   const b = characterById(props.setup.cpu)
-  const stage = STAGES.find((s) => s.id === props.setup.stageId) ?? STAGES[0]
+  const stage = stageById(props.setup.stageId)
   useEffect(() => {
     const t = window.setTimeout(props.onDone, 2200)
     const onKey = (e: KeyboardEvent) => {
