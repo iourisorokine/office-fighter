@@ -1,4 +1,25 @@
 import { GRAVITY, INPUT_BUFFER, STAGE_LEFT, STAGE_RIGHT } from '../constants'
+import {
+  AUTO_GUARD_POSE_DISTANCE,
+  CHARACTER_SIZE_MULTIPLIER as SIZE,
+  DAMAGE_MULTIPLIER,
+  DEFAULT_KNOCKDOWN_LAUNCH,
+  FRAMES_BEFORE_JUMP_TAKEOFF,
+  FRAMES_LYING_ON_FLOOR,
+  FRAMES_OF_LANDING_RECOVERY,
+  FRAMES_TO_GET_UP,
+  GROUND_SLIDE_KEPT_PER_FRAME,
+  JUMP_FORWARD_SPEED_MULTIPLIER,
+  JUMP_TAKEOFF_SPEED_MULTIPLIER,
+  KNOCKBACK_MULTIPLIER,
+  KO_MINIMUM_LAUNCH,
+  SCOPE_CREEP_JUMP_DISTANCE,
+  SCOPE_CREEP_WALK_SPEED,
+  SPECIAL_COOLDOWN_MULTIPLIER,
+  SPECIAL_LAST_ARROW_MAX_AGE_FRAMES,
+  SPECIAL_SEQUENCE_MAX_FRAMES,
+  WALK_SPEED_MULTIPLIER,
+} from '../tuning'
 import { styled } from './poses'
 import {
   emptyInput,
@@ -46,8 +67,8 @@ export type FighterEvent =
 export type WorldRect = Rect
 
 /** How long a sequence may take, and how fresh its last direction must be. */
-const SEQ_WINDOW = 36
-const SEQ_LAST = 16
+const SEQ_WINDOW = SPECIAL_SEQUENCE_MAX_FRAMES
+const SEQ_LAST = SPECIAL_LAST_ARROW_MAX_AGE_FRAMES
 
 export class Fighter {
   readonly char: CharacterDef
@@ -84,14 +105,23 @@ export class Fighter {
   private lastLK = -99
   private lastHK = -99
   private dirHistory: { d: Dir; t: number }[] = []
+  /** standing height in screen pixels (body design size x CHARACTER_SIZE_MULTIPLIER) */
   private readonly height: number
 
-  constructor(char: CharacterDef, paletteIndex: number) {
+  /**
+   * `skinOf`: in a mirror match the second fighter gets the other outfit
+   * colours but keeps the first one's skin tone.
+   */
+  constructor(char: CharacterDef, paletteIndex: number, skinOf?: Palette) {
     this.char = char
-    this.palette = char.palettes[paletteIndex % char.palettes.length]
+    const pal = char.palettes[paletteIndex % char.palettes.length]
+    this.palette =
+      skinOf && skinOf !== pal
+        ? { ...pal, id: `${pal.id}+skin:${skinOf.id}`, skin: skinOf.skin, skinShade: skinOf.skinShade }
+        : pal
     this.health = char.stats.health
     const b = char.body
-    this.height = Math.round((b.thigh + b.shin) * 0.9 + b.torso + b.neck + b.headR * 2 - 1)
+    this.height = Math.round(((b.thigh + b.shin) * 0.9 + b.torso + b.neck + b.headR * 2 - 1) * SIZE)
   }
 
   get maxHealth() {
@@ -146,7 +176,7 @@ export class Fighter {
       opp.state === 'attack' &&
       !!opp.move?.hitbox &&
       opp.t < opp.move.startup + opp.move.active &&
-      Math.abs(opp.x - this.x) < 110
+      Math.abs(opp.x - this.x) < AUTO_GUARD_POSE_DISTANCE
     )
   }
 
@@ -176,10 +206,11 @@ export class Fighter {
         this.neutral(inp, opp)
         break
       case 'prejump':
-        if (this.t >= 4) {
+        if (this.t >= FRAMES_BEFORE_JUMP_TAKEOFF) {
           this.airborne = true
-          this.vy = this.char.stats.jumpV
-          this.vx = this.jumpDir * this.char.stats.jumpVX * (this.slowed > 0 ? 0.6 : 1)
+          this.vy = this.char.stats.jumpV * JUMP_TAKEOFF_SPEED_MULTIPLIER
+          this.vx =
+            this.jumpDir * this.char.stats.jumpVX * JUMP_FORWARD_SPEED_MULTIPLIER * (this.slowed > 0 ? SCOPE_CREEP_JUMP_DISTANCE : 1)
           this.airAttackUsed = false
           this.setState('jump')
         }
@@ -192,7 +223,7 @@ export class Fighter {
         }
         break
       case 'land':
-        if (this.t >= 4) this.setState('idle')
+        if (this.t >= FRAMES_OF_LANDING_RECOVERY) this.setState('idle')
         break
       case 'attack': {
         const m = this.move!
@@ -212,10 +243,10 @@ export class Fighter {
         }
         break
       case 'down':
-        if (this.t >= 40) this.setState('getup')
+        if (this.t >= FRAMES_LYING_ON_FLOOR) this.setState('getup')
         break
       case 'getup':
-        if (this.t >= 16) {
+        if (this.t >= FRAMES_TO_GET_UP) {
           this.comboCount = 0
           this.setState('idle')
         }
@@ -260,7 +291,7 @@ export class Fighter {
 
     if (this.specialRequested(inp)) {
       this.dirHistory = []
-      this.specialCd = special.cooldown
+      this.specialCd = Math.round(special.cooldown * SPECIAL_COOLDOWN_MULTIPLIER)
       this.startAttack(special.move)
       this.events.push({ type: 'special', name: special.move.name })
       return
@@ -298,7 +329,7 @@ export class Fighter {
   }
 
   private get speedMul() {
-    return this.slowed > 0 ? 0.5 : 1
+    return WALK_SPEED_MULTIPLIER * (this.slowed > 0 ? SCOPE_CREEP_WALK_SPEED : 1)
   }
 
   private startAttack(move: MoveDef) {
@@ -323,7 +354,7 @@ export class Fighter {
       }
     } else {
       this.x += this.vx
-      this.vx *= 0.75
+      this.vx *= GROUND_SLIDE_KEPT_PER_FRAME
       if (Math.abs(this.vx) < 0.05) this.vx = 0
     }
     this.x = Math.max(STAGE_LEFT, Math.min(STAGE_RIGHT, this.x))
@@ -353,10 +384,17 @@ export class Fighter {
     return 'recovery'
   }
 
-  private toWorld(r: Rect): WorldRect {
-    const x0 = this.facing === 1 ? this.x + r.x0 : this.x - r.x1
-    const x1 = this.facing === 1 ? this.x + r.x1 : this.x - r.x0
-    return { x0, x1, y0: this.y + r.y0, y1: this.y + r.y1 }
+  /** a box in design units (relative to the feet, facing right) to screen/world space */
+  private toWorld(r: Rect, scaled = true): WorldRect {
+    const s = scaled ? SIZE : 1
+    const x0 = this.facing === 1 ? this.x + r.x0 * s : this.x - r.x1 * s
+    const x1 = this.facing === 1 ? this.x + r.x1 * s : this.x - r.x0 * s
+    return { x0, x1, y0: this.y + r.y0 * s, y1: this.y + r.y1 * s }
+  }
+
+  /** body half-width in screen pixels */
+  get halfWidth() {
+    return this.char.hurtHalfW * SIZE
   }
 
   hitboxWorld(): WorldRect | null {
@@ -366,14 +404,15 @@ export class Fighter {
 
   hurtboxesWorld(): WorldRect[] {
     if (INVULNERABLE.includes(this.state)) return []
-    const w = this.char.hurtHalfW
+    const w = this.halfWidth
     const h = this.height
     let body: Rect
-    if (this.airborne) body = { x0: -w, y0: 6, x1: w, y1: h - 4 }
-    else if (this.isCrouching()) body = { x0: -w + 1, y0: 0, x1: w + 2, y1: Math.round(h * 0.68) }
-    else if (this.state === 'prejump' || this.state === 'land') body = { x0: -w, y0: 0, x1: w, y1: h - 10 }
-    else body = { x0: -w, y0: 0, x1: w + 1, y1: h }
-    const boxes = [this.toWorld(body)]
+    // (already in screen pixels: w and h include the size multiplier)
+    if (this.airborne) body = { x0: -w, y0: 6 * SIZE, x1: w, y1: h - 4 * SIZE }
+    else if (this.isCrouching()) body = { x0: -w + SIZE, y0: 0, x1: w + 2 * SIZE, y1: Math.round(h * 0.68) }
+    else if (this.state === 'prejump' || this.state === 'land') body = { x0: -w, y0: 0, x1: w, y1: h - 10 * SIZE }
+    else body = { x0: -w, y0: 0, x1: w + SIZE, y1: h }
+    const boxes = [this.toWorld(body, false)]
     const phase = this.attackPhase()
     if (this.move?.hurtExt && (phase === 'active' || phase === 'recovery')) boxes.push(this.toWorld(this.move.hurtExt))
     return boxes
@@ -381,7 +420,7 @@ export class Fighter {
 
   /** Where the face is (for complaint stickers and effects), world space. */
   headPos(): [number, number] {
-    return [this.x + this.facing * 4, this.y + this.height - 8]
+    return [this.x + this.facing * 4 * SIZE, this.y + this.height - 8 * SIZE]
   }
 
   /** Can this fighter block a hit coming from `srcX`? */
@@ -405,31 +444,32 @@ export class Fighter {
   takeHit(hit: HitProps, srcX: number, srcFacing: 1 | -1) {
     const away = this.awayFrom(srcX, srcFacing)
     const wasStunned = this.state === 'hitstun'
-    this.health = Math.max(0, this.health - hit.damage)
+    this.health = Math.max(0, this.health - Math.round(hit.damage * DAMAGE_MULTIPLIER))
     this.comboCount = wasStunned ? this.comboCount + 1 : 1
     this.facing = away === 1 ? -1 : 1
     this.move = null
     if (this.airborne || hit.knockdown || this.health <= 0) {
-      const [lvx, lvy] = hit.launch ?? [1.6, 3.6]
+      const [lvx, lvy] = hit.launch ?? DEFAULT_KNOCKDOWN_LAUNCH
+      const [kox, koy] = KO_MINIMUM_LAUNCH
       this.setState('knockdown')
       this.airborne = true
       this.y = Math.max(this.y, 1)
-      this.vy = this.health <= 0 ? Math.max(lvy, 5) : lvy
-      this.vx = away * (this.health <= 0 ? Math.max(lvx, 2.2) : lvx)
+      this.vy = (this.health <= 0 ? Math.max(lvy, koy) : lvy) * KNOCKBACK_MULTIPLIER
+      this.vx = away * (this.health <= 0 ? Math.max(lvx, kox) : lvx) * KNOCKBACK_MULTIPLIER
       return
     }
     this.crouchStun = this.isCrouching() || this.input.held.down
     this.stun = hit.hitstun
-    this.vx = away * hit.pushHit
+    this.vx = away * hit.pushHit * KNOCKBACK_MULTIPLIER
     this.setState('hitstun')
   }
 
   block(hit: HitProps, srcX: number, srcFacing: 1 | -1) {
     const away = this.awayFrom(srcX, srcFacing)
-    this.health = Math.max(1, this.health - (hit.chip ?? 0))
+    this.health = Math.max(1, this.health - Math.round((hit.chip ?? 0) * DAMAGE_MULTIPLIER))
     this.crouchStun = this.input.held.down
     this.stun = hit.blockstun
-    this.vx = away * hit.pushBlock
+    this.vx = away * hit.pushBlock * KNOCKBACK_MULTIPLIER
     this.move = null
     this.setState('blockstun')
   }

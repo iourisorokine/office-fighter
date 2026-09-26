@@ -21,6 +21,15 @@ Other scripts:
 Dev tool: with `npm run dev` running, open **/sprites.html** to see every pose of every
 character side by side (useful when tuning poses).
 
+## Tuning the gameplay
+
+All the numbers that shape how the game feels (character size, gravity, jump
+power, walking speed, input reactivity, damage, knockback, round length, CPU
+difficulty...) are in **`src/game/tuning.ts`**, each with a plain-English
+explanation. Edit, save, and the dev server reloads the game. Per-character
+values (health, speeds, jump, frame data of each move) are in
+`src/game/characters/<name>.ts`.
+
 ## Deploy (GitHub Pages)
 
 `.github/workflows/deploy.yml` builds and publishes the game on every push to `main`.
@@ -48,27 +57,44 @@ Directions in special moves are relative to where you face (→ = forward).
 | fighter   | weapon            | special (press in order)                  | style |
 | --------- | ----------------- | ----------------------------------------- | ----- |
 | HR LADY   | legal folder, stilettos | **Formal Complaint** `← → X`: opens the folder, a complaint flies into the face | long reach, zoning |
-| DEVELOPER | mechanical keyboard | **Incident Declared** `↓ ↓ C`: SEV-1, the office turns red, the opponent loses health (jump to dodge; hit him while he types to cancel it) | slow, tanky, hits hard |
+| DEVELOPER | giant rubber duck (squeaks on every hit) | **Incident Declared** `↓ ↓ C`: SEV-1, the office turns red, the opponent loses health (jump to dodge; hit him while he types to cancel it) | slow, tanky, hits hard |
 | PRODUCT MANAGER | laptop | **New Requirement** `← → C`: a sticky ticket in the face; scope creep halves the victim's speed for 3 s | quick, annoying |
-| ARCHITECT | a whole whiteboard | **Ivory Tower** `↓ ← X`: a shadow marks the opponent's spot, then a stack of API/SVC/DB boxes crashes down (walk out!) | slow, huge reach |
+| ARCHITECT (the Diagram Wizard) | poster tube staff; the heavy attack unrolls the diagram like a whip | **Microservices** `↓ ← X`: a swarm of little service boxes weaves across the screen, each one a small hit | long reach, zoning |
 | SALES REP | brick phone       | **Mega Bullshit** `→ → C`: a cloud of pure bullshit blows the opponent (and their projectiles) away | fast, light hits |
 | PINGU THE INTERN | none, just kicks | **Coffee Splash** `↓ → X`: throws a hot coffee | eager but weak |
 | THE VC (secret boss) | cash, lots of it | **Raise** `↓ ↓ X`: money rains from the ceiling, every bill hurts | big, throws cash constantly |
 
 Each special recharges (gauge under the health bar, "SPECIAL" when ready).
-A new, random opponent steps in at every round, and the room changes every round too.
-Win the match **2-0** and the VC makes his entrance (a short cut-scene on his pile of cash, skippable with X/C), then fights you in the boss's office:
-beat him and you're funded (CEO ending); lose and you're still promoted.
+Starting a special triggers a "super flash": the room dims, light bursts from the
+fighter and the move's name sweeps across the screen.
+
+## The tower (main menu)
+
+| floor | opponents (they open one at a time, in this order) |
+| ----- | --------------------------------------------------- |
+| 1F    | Pingu the Intern → Product Manager → Developer |
+| 2F    | Sales Rep → Architect → HR Lady |
+| 3F    | the VC (final boss, cut-scene first) |
+
+A floor opens with its first opponent only; each win opens the next one on
+that floor. Beating anyone on your highest floor opens the next floor. Beat
+the VC to become CEO. Progress is saved in the browser (Reset button on the
+tower). **Quick Fight** keeps the arcade mode: new opponent and room every
+round, and the VC bonus round after a 2-0.
 
 ## The rooms
 
-| stage         | on the wall |
-| ------------- | ----------- |
-| Open Space    | MOONSHOT |
-| Cafeteria     | WORK HARD, PLAY HARDER |
-| Meeting Room  | DREAM BIG · FULL SPEED NO BRAKES |
-| Boss's Office | WIN OR DIE |
-| Cowork Café   | DO WHAT YOU LOVE (neon) |
+Every opponent fights on home turf in the tower.
+
+| stage              | home of   | on the wall |
+| ------------------ | --------- | ----------- |
+| Open Space         | HR Lady   | MOONSHOT |
+| Cafeteria          | Intern    | WORK HARD, PLAY HARDER |
+| Meeting Room       | Sales Rep | DREAM BIG · FULL SPEED NO BRAKES |
+| Cowork Café        | PM        | DO WHAT YOU LOVE (neon) |
+| Server Room        | Developer | MOVE FAST AND BREAK THINGS |
+| Architect's Office | Architect | DESIGN FOR SCALE · IT DEPENDS |
+| Boss's Office      | the VC    | WIN OR DIE |
 
 ## How it's built
 
@@ -80,7 +106,8 @@ src/
     Match.ts              rounds, timer, hit detection, hit-stop, effects
     loop.ts               fixed 60 fps timestep
     input.ts              keyboard -> buttons (physical key codes)
-    constants.ts          resolution (384x216), floor, gravity...
+    tuning.ts             ALL gameplay knobs: size, gravity, jumps, speed, reactivity, CPU...
+    constants.ts          screen geometry (384x216, floor line)
     types.ts              Pose, MoveDef, CharacterDef...
     fighter/Fighter.ts    fighter state machine + physics + boxes
     fighter/poses.ts      generic key poses (idle, walk, jump, hit...)

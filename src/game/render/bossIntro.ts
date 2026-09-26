@@ -208,7 +208,7 @@ function typewriter(text: string, t: number, start: number) {
   return text.slice(0, Math.max(0, Math.floor((t - start) / 2)))
 }
 
-export function drawBossIntro(ctx: Ctx, t: number, char: CharacterDef, frame: number) {
+export function drawBossIntro(ctx: Ctx, t: number, char: CharacterDef, frame: number, label = 'BONUS ROUND') {
   const ease = (x: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3)
   const dy = Math.round(90 * (1 - ease(t / 80)))
 
@@ -224,7 +224,7 @@ export function drawBossIntro(ctx: Ctx, t: number, char: CharacterDef, frame: nu
     rect(ctx, x - 6, 30, 176, 88, 'rgba(8, 6, 20, 0.8)')
     rect(ctx, x - 6, 30, 176, 2, '#ffd23c')
     rect(ctx, x - 6, 116, 176, 2, '#ffd23c')
-    drawText(ctx, 'BONUS ROUND', x, 37, { color: '#5fe08a' })
+    drawText(ctx, label, x, 37, { color: '#5fe08a' })
     drawText(ctx, char.name, x, 50, { scale: 4, color: '#ffd23c', outline: '#8e1616' })
     drawText(ctx, 'MANAGING PARTNER', x, 84, { color: '#ffffff' })
     drawText(ctx, 'MOONSHOT CAPITAL', x, 94, { color: '#ffffff' })

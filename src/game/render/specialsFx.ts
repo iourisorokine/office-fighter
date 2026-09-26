@@ -1,7 +1,8 @@
 import { FLOOR_Y, VIEW_H, VIEW_W } from '../constants'
 import type { Fighter } from '../fighter/Fighter'
-import { INCIDENT_END, INCIDENT_WARNING, TOWER_HALF_W, TOWER_LAND, type Incident, type Projectile, type Tower } from '../specials'
+import { INCIDENT_END, INCIDENT_WARNING, type Incident, type Projectile } from '../specials'
 import { drawText } from './font'
+import { PROJECTILE_SIZE_MULTIPLIER } from '../tuning'
 
 type Ctx = CanvasRenderingContext2D
 
@@ -132,57 +133,101 @@ function drawBill(ctx: Ctx, x: number, y: number, t: number, big = false) {
   if (big) rect(ctx, x - w / 2 + 1, y - h / 2 + 1, 2, 2, '#1e5a2a')
 }
 
-export function drawProjectiles(ctx: Ctx, list: readonly Projectile[]) {
-  for (const p of list) {
-    if (p.kind === 'coffee') drawCoffee(ctx, p)
-    else if (p.kind === 'complaint') drawComplaint(ctx, p)
-    else if (p.kind === 'requirement') drawRequirement(ctx, p)
-    else if (p.kind === 'cash') {
-      // a fanned wad of bills
-      const x = Math.round(p.x)
-      const y = Math.round(FLOOR_Y - p.y)
-      drawBill(ctx, x - 4, y + 2, p.t, true)
-      drawBill(ctx, x, y - 1, p.t + 3, true)
-      drawBill(ctx, x + 4, y + 1, p.t + 5, true)
-    } else if (p.kind === 'bill') drawBill(ctx, Math.round(p.x), Math.round(FLOOR_Y - p.y), p.t)
-    else drawBullshit(ctx, p)
+const SERVICE_COLORS = ['#3a7bd5', '#2a9a4a', '#d62828', '#8a4ad5', '#e0a020', '#1aa0b0']
+
+/** one little microservice: a box with a coloured header, a label and a status LED */
+function drawService(ctx: Ctx, p: Projectile) {
+  const x = Math.round(p.x)
+  const y = Math.round(FLOOR_Y - p.y)
+  const c = SERVICE_COLORS[p.id % SERVICE_COLORS.length]
+  const bob = Math.floor(p.t / 6) % 2
+  rect(ctx, x - 5, y - 4 + bob, 11, 9, '#10101c')
+  rect(ctx, x - 4, y - 3 + bob, 9, 7, '#f4f4ee')
+  rect(ctx, x - 4, y - 3 + bob, 9, 2, c)
+  rect(ctx, x - 3, y + bob, 5, 1, '#8a8aa0')
+  rect(ctx, x - 3, y + 2 + bob, 3, 1, '#8a8aa0')
+  rect(ctx, x + 2, y + 1 + bob, 2, 2, p.t % 10 < 5 ? '#5fe08a' : '#2a6a3a')
+  // a dotted "API call" line trailing behind
+  const dir = Math.sign(p.vx) || 1
+  for (let i = 1; i <= 3; i++) rect(ctx, x - dir * (6 + i * 3), y + bob, 1, 1, c)
+}
+
+const GLOW: Record<string, string> = {
+  service: '95, 216, 255',
+  coffee: '255, 170, 80',
+  complaint: '255, 90, 90',
+  requirement: '255, 225, 53',
+  cash: '120, 230, 120',
+  bullshit: '232, 212, 160',
+}
+
+/** scratch canvas: small projectiles are drawn here at 1x, then scaled up crisp */
+let scratch: HTMLCanvasElement | null = null
+const SCR = 96
+
+function drawOne(ctx: Ctx, p: Projectile) {
+  if (p.kind === 'coffee') drawCoffee(ctx, p)
+  else if (p.kind === 'service') drawService(ctx, p)
+  else if (p.kind === 'complaint') drawComplaint(ctx, p)
+  else if (p.kind === 'requirement') drawRequirement(ctx, p)
+  else if (p.kind === 'cash') {
+    // a fanned wad of bills
+    const x = Math.round(p.x)
+    const y = Math.round(FLOOR_Y - p.y)
+    drawBill(ctx, x - 4, y + 2, p.t, true)
+    drawBill(ctx, x, y - 1, p.t + 3, true)
+    drawBill(ctx, x + 4, y + 1, p.t + 5, true)
+  } else if (p.kind === 'bill') drawBill(ctx, Math.round(p.x), Math.round(FLOOR_Y - p.y), p.t)
+  else drawBullshit(ctx, p)
+}
+
+/** a soft pulsing halo behind a projectile */
+function glow(ctx: Ctx, x: number, y: number, r: number, rgb: string, t: number) {
+  const pulse = 0.22 + 0.1 * Math.sin(t * 0.4)
+  for (const [k, a] of [[1, pulse * 0.5], [0.65, pulse]] as const) {
+    const rr = Math.round(r * k)
+    ctx.fillStyle = `rgba(${rgb}, ${a})`
+    for (let yy = -rr; yy <= rr; yy += 2) {
+      const half = Math.round(Math.sqrt(rr * rr - yy * yy))
+      ctx.fillRect(x - half, y + yy, half * 2, 2)
+    }
   }
 }
 
-/** Ivory Tower: a warning shadow, then a stack of architecture boxes falls from the sky. */
-export function drawTowers(ctx: Ctx, towers: readonly Tower[]) {
-  for (const tw of towers) {
-    const x = Math.round(tw.x)
-    if (tw.t < TOWER_LAND) {
-      const k = Math.min(1, tw.t / 30)
-      const w = Math.round(TOWER_HALF_W * (0.4 + 0.6 * k))
-      ctx.fillStyle = `rgba(10, 10, 30, ${0.25 + 0.3 * k})`
-      ctx.fillRect(x - w, FLOOR_Y - 2, w * 2, 5)
-      if (Math.floor(tw.t / 5) % 2 === 0) {
-        rect(ctx, x - w - 2, FLOOR_Y - 3, 2, 7, '#ff4a2a')
-        rect(ctx, x + w, FLOOR_Y - 3, 2, 7, '#ff4a2a')
-      }
+export function drawProjectiles(ctx: Ctx, list: readonly Projectile[]) {
+  for (const p of list) {
+    if ((p.delay ?? 0) > 0) continue
+    if (p.kind === 'bill') {
+      drawOne(ctx, p)
+      continue
     }
-    // the stack falls in the last 12 frames before landing, then sits there and fades
-    const fall = tw.t < TOWER_LAND - 12 ? null : Math.max(0, (TOWER_LAND - tw.t) / 12)
-    if (fall === null) continue
-    if (tw.t > TOWER_LAND + 20 && tw.t % 4 < 2) continue
-    const drop = Math.round(fall * 190)
-    const labels = ['API', 'SVC', 'DB']
-    labels.forEach((label, i) => {
-      const bw = 34 - i * 4
-      const bh = 16
-      const by = FLOOR_Y - (i + 1) * (bh + 4) - drop
-      rect(ctx, x - bw / 2 - 1, by - 1, bw + 2, bh + 2, '#10101c')
-      rect(ctx, x - bw / 2, by, bw, bh, i === 2 ? '#3a7bd5' : '#f4f4ee')
-      rect(ctx, x - bw / 2, by + bh - 3, bw, 3, i === 2 ? '#2a5aa8' : '#c8ccd4')
-      drawText(ctx, label, x, by + 4, { color: i === 2 ? '#ffffff' : '#10101c', align: 'center' })
-      if (i < 2) {
-        // arrow to the next box
-        rect(ctx, x, by - 4, 1, 4, '#10101c')
-        rect(ctx, x - 1, by - 2, 3, 1, '#10101c')
-      }
-    })
+    const x = Math.round(p.x)
+    const y = Math.round(FLOOR_Y - p.y)
+    glow(ctx, x, y, Math.round(Math.max(p.w, p.h) * 0.75), GLOW[p.kind] ?? '255, 255, 255', p.t)
+    if (p.kind === 'bullshit') {
+      // the cloud already scales itself with its (bigger) hit box
+      drawOne(ctx, p)
+      continue
+    }
+    // draw at 1x on the scratch canvas, centred, then blow it up with crisp pixels
+    if (!scratch) {
+      scratch = document.createElement('canvas')
+      scratch.width = SCR
+      scratch.height = SCR
+    }
+    const sc = scratch.getContext('2d')!
+    sc.clearRect(0, 0, SCR, SCR)
+    drawOne(sc, { ...p, x: SCR / 2, y: FLOOR_Y - SCR / 2 })
+    const k = PROJECTILE_SIZE_MULTIPLIER * (1 + 0.06 * Math.sin(p.t * 0.5))
+    const size = Math.round(SCR * k)
+    // motion trail: fading copies behind
+    const dir = Math.sign(p.vx) || 1
+    for (const [i, a] of [[3, 0.12], [2, 0.22], [1, 0.38]] as const) {
+      ctx.globalAlpha = a
+      ctx.drawImage(scratch, Math.round(x - size / 2 - dir * i * 7), y - size / 2, size, size)
+    }
+    ctx.globalAlpha = 1
+    ctx.drawImage(scratch, x - Math.round(size / 2), y - Math.round(size / 2), size, size)
   }
 }
 

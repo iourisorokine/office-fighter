@@ -1,6 +1,8 @@
 /**
- * The tower: three floors, each with its own opponents. Beat any one
- * opponent on your highest floor to unlock the next; the VC waits on top.
+ * The tower: three floors, each with its own opponents. A floor opens with
+ * only its first opponent; every win on a floor opens the next one there
+ * (in the order listed below). Beating anyone on your highest floor opens
+ * the next floor. The VC waits on top.
  * Progress is kept in this browser (localStorage) — nothing leaves the device.
  */
 
@@ -21,17 +23,26 @@ export const TOP_FLOOR = FLOORS.length
 
 /** Everyone fights on their home turf. */
 export const HOME_ROOM: Record<string, string> = {
-  intern: 'cubicles',
+  intern: 'cafeteria',
   pm: 'cowork',
   dev: 'servers',
   sales: 'meeting',
-  architect: 'studio',
-  hr: 'cafeteria',
+  architect: 'archoffice',
+  hr: 'cubicles',
   vc: 'boss',
 }
 
 export function floorOf(opponentId: string): Floor | undefined {
   return FLOORS.find((f) => f.opponents.includes(opponentId))
+}
+
+/** Can you pick this opponent yet? (floor open, and everyone before them on the floor beaten) */
+export function isAvailable(p: Progress, opponentId: string): boolean {
+  const floor = floorOf(opponentId)
+  if (!floor || floor.level > p.unlocked) return false
+  if (p.beaten.includes(opponentId)) return true
+  const beatenHere = floor.opponents.filter((id) => p.beaten.includes(id)).length
+  return floor.opponents.indexOf(opponentId) <= beatenHere
 }
 
 export interface Progress {
@@ -79,6 +90,8 @@ export interface WinOutcome {
   unlockedFloor?: number
   /** first time beating the VC */
   becameCeo?: boolean
+  /** the opponent this win made available on the same floor, if any */
+  newOpponent?: string
 }
 
 export function recordWin(p: Progress, opponentId: string): WinOutcome {
@@ -88,6 +101,7 @@ export function recordWin(p: Progress, opponentId: string): WinOutcome {
     beaten: p.beaten.includes(opponentId) ? p.beaten : [...p.beaten, opponentId],
   }
   const out: WinOutcome = { progress: next }
+  if (floor) out.newOpponent = floor.opponents.find((id) => !isAvailable(p, id) && isAvailable(next, id))
   if (floor && floor.level === p.unlocked && floor.level < TOP_FLOOR) {
     next.unlocked = floor.level + 1
     out.unlockedFloor = next.unlocked

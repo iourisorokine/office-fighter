@@ -1,27 +1,31 @@
 import type { Fighter } from '../fighter/Fighter'
 import type { ArenaView } from '../Match'
 import { noButtons, type Buttons, type InputSnapshot } from '../types'
+import { CHARACTER_SIZE_MULTIPLIER as SIZE, CPU_SKILL } from '../tuning'
 
 export type Difficulty = 'easy' | 'normal' | 'hard'
 
 interface Params {
-  /** chance to guard a given attack */
   block: number
-  /** chance to guess a low correctly when blocking */
   lowRead: number
-  /** how often it chooses to attack when in range */
   aggression: number
-  /** chance to kick an incoming jump out of the air */
   antiAir: number
-  /** frames between decisions (lower = snappier) */
   think: [number, number]
 }
 
-const PARAMS: Record<Difficulty, Params> = {
-  easy: { block: 0.2, lowRead: 0.3, aggression: 0.35, antiAir: 0.1, think: [18, 34] },
-  normal: { block: 0.5, lowRead: 0.55, aggression: 0.55, antiAir: 0.4, think: [10, 22] },
-  hard: { block: 0.82, lowRead: 0.85, aggression: 0.72, antiAir: 0.75, think: [5, 12] },
-}
+/** the difficulty knobs live in tuning.ts (CPU_SKILL) */
+const PARAMS: Record<Difficulty, Params> = Object.fromEntries(
+  Object.entries(CPU_SKILL).map(([k, v]) => [
+    k,
+    {
+      block: v.chanceToBlock,
+      lowRead: v.chanceToReadHighLow,
+      aggression: v.aggressiveness,
+      antiAir: v.chanceToAntiAir,
+      think: v.framesBetweenDecisions,
+    },
+  ]),
+) as Record<Difficulty, Params>
 
 type PlanKind = 'approach' | 'retreat' | 'wait' | 'crouch' | 'guard' | 'jumpIn' | 'jumpBack' | 'attack' | 'special'
 type AttackKind = 'lk' | 'hk' | 'clk' | 'chk'
@@ -52,8 +56,6 @@ export class CpuController {
   private seenProjectile = -1
   private dodgeProjectile: 'jump' | 'block' | 'none' = 'none'
   private seenIncident = false
-  private seenTower: object | null = null
-  private dodgeTower = false
   private dodgeIncident = false
 
   /** which player this CPU controls (to tell its own projectiles from the opponent's) */
@@ -69,7 +71,8 @@ export class CpuController {
     const pressed = noButtons()
     const toward: 'left' | 'right' = opp.x >= self.x ? 'right' : 'left'
     const away: 'left' | 'right' = toward === 'right' ? 'left' : 'right'
-    const dist = Math.abs(opp.x - self.x)
+    // distances below are thought out at size 1: measure in those units
+    const dist = Math.abs(opp.x - self.x) / SIZE
 
     let special = false
     const finish = (): InputSnapshot => {
@@ -95,17 +98,6 @@ export class CpuController {
         return finish()
       }
     } else this.seenIncident = false
-
-    // --- a tower is about to land on us: walk out of the shadow -------------
-    const tower = arena.towers.find((tw) => tw.owner !== this.side && !tw.fired && Math.abs(tw.x - self.x) < 36)
-    if (tower && tower !== this.seenTower) {
-      this.seenTower = tower
-      this.dodgeTower = chance(this.p.block + 0.1)
-    }
-    if (tower && this.dodgeTower && self.isActionable() && tower.t > 12) {
-      held[tower.x > self.x ? 'left' : 'right'] = true
-      return finish()
-    }
 
     // --- incoming projectile: jump over it or block -------------------------
     const threat = arena.projectiles.find(
@@ -153,7 +145,7 @@ export class CpuController {
       }
       const incoming = Math.sign(opp.vx) === Math.sign(self.x - opp.x) || dist < 30
       if (incoming && dist < 60 && self.isActionable()) {
-        if (this.willAntiAir && opp.y < 44 && opp.vy < 0) {
+        if (this.willAntiAir && opp.y < 44 * SIZE && opp.vy < 0) {
           held.hk = true
           this.plan = { kind: 'wait', frames: 25 }
           return finish()
@@ -225,7 +217,7 @@ export class CpuController {
       let odds = 0
       if (kind === 'incident') odds = dist > 70 && !opp.airborne ? 0.3 : 0
       else if (kind === 'bullshit') odds = dist > 40 && dist < 230 ? 0.25 : 0
-      else if (kind === 'tower') odds = dist > 60 ? 0.3 : 0.1
+      else if (kind === 'swarm') odds = dist > 60 ? 0.35 : 0.1
       else if (kind === 'raise') odds = 0.3
       else odds = dist > 90 ? 0.35 : 0
       if (chance(odds * (0.5 + a))) return { kind: 'special', frames: 30, attack: 'lk' }

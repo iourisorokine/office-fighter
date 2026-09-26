@@ -123,13 +123,13 @@ export interface Palette {
   propDark: string
 }
 
-export type HairStyle = 'short' | 'bun' | 'messy' | 'slick' | 'bob' | 'crew' | 'beehive' | 'mop'
-export type PropKind = 'none' | 'folder' | 'keyboard' | 'phone' | 'laptop' | 'whiteboard' | 'cash'
+export type HairStyle = 'short' | 'bun' | 'messy' | 'slick' | 'bob' | 'crew' | 'beehive' | 'mop' | 'shaggy' | 'wizard'
+export type PropKind = 'none' | 'folder' | 'keyboard' | 'phone' | 'laptop' | 'whiteboard' | 'cash' | 'tube' | 'duck'
 
 /** Visual traits that make each office archetype recognisable. */
 export interface Look {
   hair: HairStyle
-  top: 'shirt' | 'tshirt' | 'jacket' | 'sweater' | 'turtleneck' | 'vest' | 'hoodie'
+  top: 'shirt' | 'tshirt' | 'jacket' | 'sweater' | 'turtleneck' | 'vest' | 'hoodie' | 'cardigan'
   /** horizontal stripes (accent colour) on the top */
   stripes?: boolean
   tie: boolean
@@ -148,6 +148,10 @@ export interface Look {
   propScale?: number
   headphones?: boolean
   earrings?: boolean
+  /** a long open cardigan hanging to the knees like a robe (jacket colours) */
+  robe?: boolean
+  /** a scarf around the neck, one end hanging, one blowing back (tie colours) */
+  scarf?: boolean
 }
 
 /**
@@ -193,7 +197,7 @@ export interface HitProps {
   launch?: [number, number]
 }
 
-export type SpawnKind = 'coffee' | 'complaint' | 'bullshit' | 'incident' | 'requirement' | 'tower' | 'cash' | 'raise'
+export type SpawnKind = 'coffee' | 'complaint' | 'bullshit' | 'incident' | 'requirement' | 'swarm' | 'cash' | 'raise'
 
 export interface MoveDef extends HitProps {
   id: string

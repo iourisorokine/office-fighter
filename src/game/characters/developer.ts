@@ -3,13 +3,14 @@ import type { CharacterDef, MoveDef, Palette, Pose } from '../types'
 import { baseMoves, reach, specialMove, standLegs, tweak } from './common'
 
 /**
- * THE DEVELOPER — big, slow, hard to knock over. Swings a mechanical
- * keyboard, and can declare an incident that turns the whole office red.
+ * THE DEVELOPER — slow, hard to knock over, long messy hair. Fights with a
+ * giant rubber duck (for debugging) that squeaks on every hit, and can
+ * declare an incident that turns the whole office red.
  */
 
-const ctrlAltJab: MoveDef = {
-  id: 'ctrlAltJab',
-  name: 'Ctrl+Alt+Jab',
+const duckJab: MoveDef = {
+  id: 'duckJab',
+  name: 'Rubber Duck Debug',
   startup: 5,
   active: 3,
   recovery: 11,
@@ -29,9 +30,9 @@ const ctrlAltJab: MoveDef = {
   },
 }
 
-const overheadDeploy: MoveDef = {
-  id: 'overheadDeploy',
-  name: 'Overhead Deploy',
+const quackHammer: MoveDef = {
+  id: 'quackHammer',
+  name: 'Quack Hammer',
   startup: 10,
   active: 4,
   recovery: 20,
@@ -83,10 +84,11 @@ const base = {
   eye: '#bfe8ff',
   belt: '#2a1a12',
   tieShade: '#000000',
-  prop: '#d8cfb2',
-  propShade: '#a89e80',
-  propB: '#e8e0c4',
-  propDark: '#5a5448',
+  // the rubber duck
+  prop: '#ffd23c',
+  propShade: '#d8960c',
+  propB: '#fff8c8',
+  propDark: '#ff7a1e',
 }
 
 const palettes: Palette[] = [
@@ -132,46 +134,47 @@ export const developer: CharacterDef = {
   id: 'dev',
   name: 'DEVELOPER',
   title: 'Senior Full-Stack Wizard',
-  bio: 'Has not seen daylight since the last release. Types at 140 WPM, hits harder.',
+  bio: 'Has not seen daylight since the last release. Explains every bug to his rubber duck, then hits you with it.',
   stats: { health: 132, power: 5, walkF: 1.2, walkB: 1.0, jumpV: 5.0, jumpVX: 1.6 },
   body: {
     thigh: 12,
     shin: 12,
     upperArm: 10,
     foreArm: 9,
-    torso: 22,
+    torso: 21,
     neck: 1,
     headR: 11,
-    shoulderW: 24,
-    hipW: 22,
-    thighW: 12,
-    shinW: 10,
-    armW: 8,
-    foreW: 7,
+    shoulderW: 20,
+    hipW: 17,
+    thighW: 9.5,
+    shinW: 8,
+    armW: 6.5,
+    foreW: 5.5,
   },
   look: {
-    hair: 'mop',
+    hair: 'shaggy',
     top: 'hoodie',
     tie: false,
     skirt: false,
-    belly: 15,
+    belly: 7,
     shoes: 'sneakers',
     glasses: 'glare',
     beard: true,
     lipstick: false,
     grin: false,
     logo: true,
-    prop: 'keyboard',
+    prop: 'duck',
+    propScale: 1.35,
     headphones: true,
   },
   // hunched over, peering down through the glare, keyboard held low
   style: { lean: 10, head: 1, stance: 1.25, squat: 1, guard: [2, -6] },
-  hurtHalfW: 16,
+  hurtHalfW: 13,
   palettes,
   poses: defaultPoses,
   moves: {
-    standLK: ctrlAltJab,
-    standHK: overheadDeploy,
+    standLK: duckJab,
+    standHK: quackHammer,
     crouchLK: reach(tweak(baseMoves.crouchLK, { name: 'Sneaker Poke' }), -3),
     crouchHK: reach(tweak(baseMoves.crouchHK, { name: 'Legacy Sweep', damage: 13 }), -3),
     airLK: reach(tweak(baseMoves.airLK, { name: 'Hotfix Kick' }), -3),

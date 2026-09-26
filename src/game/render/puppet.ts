@@ -9,10 +9,10 @@ import { REF_LEGS, REF_TORSO, type BodyDims, type Face, type Limb, type Look, ty
  * Sprites are cached, and poses are a handful of discrete key frames.
  */
 
-export const SPR_W = 128
+export const SPR_W = 168
 export const SPR_H = 104
-/** Where the feet origin (0,0) sits inside the sprite. */
-export const SPR_OX = 64
+/** Where the feet origin (0,0) sits inside the sprite (room for long weapons on either side). */
+export const SPR_OX = 84
 export const SPR_OY = 99
 
 // palette indices
@@ -181,14 +181,29 @@ class PixelBuffer {
     }
   }
 
-  /** one "world pixel" (a k x k block at high resolution) */
+  /**
+   * One "world pixel". At whole-number k it is a k x k block; at a
+   * fractional k (the in-game 1.2) the design-pixel grid is mapped onto the
+   * screen grid, so neighbouring dots tile without gaps (some 1 px, some 2).
+   */
   dot(p: Vec2, c: number) {
     const k = this.k
-    const size = Math.max(1, Math.ceil(k))
-    const px = Math.floor((SPR_OX + p[0]) * k)
-    const py = Math.floor((SPR_OY - p[1]) * k)
-    for (let y = py; y < py + size; y++) {
-      for (let x = px; x < px + size; x++) {
+    let px: number, py: number, x1: number, y1: number
+    if (Number.isInteger(k)) {
+      px = Math.floor((SPR_OX + p[0]) * k)
+      py = Math.floor((SPR_OY - p[1]) * k)
+      x1 = px + k
+      y1 = py + k
+    } else {
+      const ix = Math.floor(SPR_OX + p[0])
+      const iy = Math.floor(SPR_OY - p[1])
+      px = Math.floor(ix * k)
+      py = Math.floor(iy * k)
+      x1 = Math.max(px + 1, Math.floor((ix + 1) * k))
+      y1 = Math.max(py + 1, Math.floor((iy + 1) * k))
+    }
+    for (let y = py; y < y1; y++) {
+      for (let x = px; x < x1; x++) {
         if (x >= 0 && x < this.w && y >= 0 && y < this.h) this.data[y * this.w + x] = c
       }
     }
@@ -317,11 +332,32 @@ function drawSkirt(c: Ctx, hip: Vec2, knees: Vec2[]) {
   c.buf.paint(polygon(pts), boundsOf(pts, 2), JACK, JACK_S, 2)
 }
 
+/** long open cardigan: two coat-tail panels that follow each thigh, so it parts when striding */
+function drawRobe(c: Ctx, hip: Vec2, knees: Vec2[]) {
+  const hw = c.body.hipW / 2
+  for (const knee of knees) {
+    const d = norm(sub(knee, hip))
+    const n = perp(d)
+    const top = add(hip, mul(d, -3))
+    const len = 21
+    const bottom = add(hip, mul(d, len))
+    const w0 = hw * 0.8 + 0.5
+    const w1 = hw * 0.8 + 2.5
+    const pts: Vec2[] = [add(top, mul(n, w0)), add(bottom, mul(n, w1)), add(bottom, mul(n, -w1)), add(top, mul(n, -w0))]
+    c.buf.paint(polygon(pts), boundsOf(pts, 2), JACK, JACK_S, 2, (x, y) => {
+      // knitted rib at the hem
+      const along = dot(sub([x, y], hip), d)
+      return along > len - 2.5 ? JACK_S : null
+    })
+  }
+}
+
 function drawArm(c: Ctx, shoulder: Vec2, limb: Limb, far: boolean) {
   const { buf, body, look } = c
   const { joint: elbow, end: hand } = solveLimb(shoulder, limb, body.upperArm, body.foreArm, 'arm')
-  const sleeve = look.top === 'jacket' ? JACK : TOP
-  const sleeveS = look.top === 'jacket' ? JACK_S : TOP_S
+  const jacketSleeve = look.top === 'jacket' || look.top === 'cardigan'
+  const sleeve = jacketSleeve ? JACK : TOP
+  const sleeveS = jacketSleeve ? JACK_S : TOP_S
   const upper = capsule(shoulder, elbow, body.armW / 2)
   const fore = capsule(elbow, hand, body.foreW / 2)
   const bb = boundsOf([shoulder, elbow, hand], 5)
@@ -347,7 +383,7 @@ function drawProp(c: Ctx, fist: Vec2, forearm: Vec2, pose: Pose) {
   const pp = pose.prop ?? {}
   if (look.prop === 'none' || pp.hidden) return
   // neutral poses: each prop has its own resting angle (so it doesn't hide the face)
-  const REST: Record<string, number> = { folder: 12, keyboard: 55, phone: 165, laptop: 20, whiteboard: 4, cash: 70 }
+  const REST: Record<string, number> = { folder: 12, keyboard: 55, phone: 165, laptop: 20, whiteboard: 4, cash: 70, tube: 165, duck: 100 }
   const d = pp.angle !== undefined ? dirOf(pp.angle) : pp.follow ? forearm : dirOf(REST[look.prop])
   const n = perp(d)
   if (look.prop === 'laptop' && !pp.open) {
@@ -390,6 +426,71 @@ function drawProp(c: Ctx, fist: Vec2, forearm: Vec2, pose: Pose) {
       if (Math.abs(across - (4.5 - (along - 11) * 0.9)) < 0.6 && along > 11 && along < 17) return PROP_D
       return null
     })
+    return
+  }
+  if (look.prop === 'tube') {
+    const S = look.propScale ?? 1
+    if (pp.open) {
+      // unrolled: a short stub of tube, then a long wavy sheet of diagram cracking like a whip
+      const stub = box(add(fist, mul(d, -4)), d, 9, 2.2)
+      buf.paint(polygon(stub), boundsOf(stub, 2), PROP, PROP_S, 1)
+      const start = add(fist, mul(d, 4))
+      const L = 34 * S
+      const half = 4.4 * S
+      const wave = (a: number) => Math.sin(a * 0.2) * 2.4
+      const sheet: Shape = (x, y, inset) => {
+        const rel = sub([x, y], start)
+        const along = dot(rel, d)
+        if (along < 0 || along > L - inset) return false
+        const across = dot(rel, n) - wave(along)
+        return Math.abs(across) <= half * (1 - (along / L) * 0.3) - inset
+      }
+      const ends = [start, add(start, mul(d, L)), add(add(start, mul(d, L / 2)), mul(n, 4)), add(add(start, mul(d, L / 2)), mul(n, -4))]
+      buf.paint(sheet, boundsOf(ends, half + 4), PROP_B, null, 1, (x, y) => {
+        const rel = sub([x, y], start)
+        const along = dot(rel, d)
+        const across = dot(rel, n) - wave(along)
+        // little boxes and arrows drawn on the sheet
+        const cell = Math.floor(along / 8)
+        const u = along - cell * 8
+        if (cell % 2 === 0 && u > 1.5 && u < 6 && Math.abs(across) < 1.8 && (u < 2.5 || u > 5 || Math.abs(across) > 1)) return PROP_D
+        if (cell % 2 === 1 && Math.abs(across) < 0.5) return PROP_D
+        return null
+      })
+      return
+    }
+    // a black poster tube held like a wizard's staff
+    const from = add(fist, mul(d, -10 * S))
+    const L = 36 * S
+    const pts = box(from, d, L, 2.6 * S)
+    buf.paint(polygon(pts), boundsOf(pts, 2), PROP, PROP_S, 1, (x, y) => {
+      const along = dot(sub([x, y], from), d)
+      if (along < 2 || along > L - 2) return PROP_D // end caps
+      if (along > 22 * S && along < 25 * S) return PROP_B // label band
+      return null
+    })
+    return
+  }
+  if (look.prop === 'duck') {
+    // a giant yellow rubber duck, held by the tail: body along d, head up (n) and forward
+    const S = look.propScale ?? 1
+    const B = add(fist, mul(d, 6 * S))
+    const body = union(circle(B, 5.2 * S), circle(add(B, mul(d, 3 * S)), 4.4 * S), circle(add(add(B, mul(d, -4.5 * S)), mul(n, 2 * S)), 2.4 * S))
+    buf.paint(body, boundsOf([B], 10 * S), PROP, PROP_S, 1, (x, y) => {
+      // a wing: a darker curve on the side
+      const rel = sub([x, y], B)
+      const along = dot(rel, d)
+      const across = dot(rel, n)
+      return Math.abs(across - (1.2 - Math.abs(along) * 0.25)) < 0.7 && along > -3 && along < 2.5 ? PROP_S : null
+    })
+    const H = add(add(B, mul(d, 5.6 * S)), mul(n, 4.4 * S))
+    buf.paint(circle(H, 3.6 * S), boundsOf([H], 5 * S), PROP, PROP_S, 1)
+    const b0 = add(add(H, mul(d, 2.6 * S)), mul(n, -0.6 * S))
+    const b1 = add(b0, mul(d, 3 * S))
+    buf.paint(capsule(b0, b1, 1.4 * S), boundsOf([b0, b1], 3 * S), PROP_D, null, 1)
+    buf.dot(add(add(H, mul(d, 1.2 * S)), mul(n, 1.1 * S)), OUT)
+    buf.dot(add(add(H, mul(d, 0.2 * S)), mul(n, 2 * S)), PROP_B)
+    buf.dot(add(add(B, mul(d, 1.5 * S)), mul(n, 2.8 * S)), PROP_B)
     return
   }
   if (look.prop === 'cash') {
@@ -469,7 +570,30 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
   if (look.top === 'turtleneck') buf.paint(capsule(n0, n1, 3.3), boundsOf([n0, n1], 5), TOP, TOP_S)
   else buf.paint(capsule(n0, n1, 2.8), boundsOf([n0, n1], 4), SKIN_S, null)
 
+  if (look.scarf) {
+    // a wrap around the neck, one end hanging on the chest, one blowing back
+    const w0 = add(add(neckBase, mul(hu, 0.8)), mul(hp, -3.6))
+    const w1 = add(add(neckBase, mul(hu, 0.8)), mul(hp, 3.8))
+    const hang0 = add(neckBase, mul(hp, 2.6))
+    const hang1 = add(add(neckBase, mul(hp, 3.6)), mul(hu, -12))
+    const blow0 = add(neckBase, mul(hp, -3))
+    const blow1 = add(add(neckBase, mul(hp, -10)), mul(hu, -3))
+    const stripes = (x: number, y: number) => (Math.floor((x + y) / 2.5) % 2 === 0 ? TIE_S : null)
+    buf.paint(capsule(blow0, blow1, 1.6), boundsOf([blow0, blow1], 3), TIE, TIE_S, 1, stripes)
+    buf.paint(capsule(hang0, hang1, 1.8), boundsOf([hang0, hang1], 3), TIE, TIE_S, 1, stripes)
+    buf.paint(capsule(w0, w1, 2.7), boundsOf([w0, w1], 4), TIE, TIE_S, 1)
+  }
+
   // hair behind the head
+  if (look.hair === 'wizard' || look.hair === 'shaggy') {
+    // long hair hanging down the back, below the jaw
+    const long = look.hair === 'shaggy'
+    const top = at(-r * 0.45, 0)
+    const bottom = at(-r * (long ? 0.55 : 0.6), -r - (long ? 6 : 4))
+    buf.paint(capsule(top, bottom, r * (long ? 0.62 : 0.55)), boundsOf([top, bottom], r + 3), HAIR, HAIR_S, 2, (x, y) =>
+      Math.floor(x * 0.9 + y * 1.7) % 4 === 0 ? HAIR_S : null,
+    )
+  }
   if (look.hair === 'bun') {
     const bun = at(-r + 0.5, r - 1.5)
     buf.paint(circle(bun, 3.8), boundsOf([bun], 5), HAIR, HAIR_S, 1)
@@ -517,6 +641,18 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
       hairR = r + 3
       region = (lx, ly) => ly > 3.4 - lx * 0.25 || (lx < -1.5 && ly > -7)
       break
+    case 'shaggy':
+      // long, messy, a fringe falling over the forehead
+      hairC = at(-1.2, 1.4)
+      hairR = r + 2.4
+      region = (lx, ly) => ly > 2 - lx * 0.35 || (lx < 0.5 && ly > -r - 2)
+      break
+    case 'wizard':
+      // wild grey hair, receding on top, sticking out everywhere
+      hairC = at(-1.4, 0.6)
+      hairR = r + 2
+      region = (lx, ly) => (ly > 3.6 - lx * 0.4 && lx < 3) || (lx < -0.5 && ly > -r - 1)
+      break
     case 'crew':
       hairC = at(-0.5, 0.8)
       hairR = r + 0.3
@@ -536,6 +672,25 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
   if (look.hair === 'messy') tufts.push(circle(at(-4, r + 0.6), 2.4), circle(at(0.5, r + 1.4), 2.4), circle(at(4, r), 2))
   if (look.hair === 'slick') tufts.push(circle(at(3.5, r - 0.8), 3))
   if (look.hair === 'beehive') tufts.push(circle(at(-1.8, r + 2.6), r * 0.85), circle(at(1.5, r + 0.6), r * 0.5))
+  if (look.hair === 'shaggy') {
+    // uneven strands all round, a fringe, and locks hanging at the back
+    const jitter = [0.4, -0.6, 0.9, -0.2, 0.7, -0.8, 0.3, 0.6]
+    for (let i = 0; i < 8; i++) {
+      const t = ((40 + i * 26) * Math.PI) / 180
+      const rr = r + 2.4 + jitter[i]
+      tufts.push(circle(at(-1.2 + Math.cos(t) * rr, 1.4 + Math.sin(t) * rr), 2 + (i % 3) * 0.4))
+    }
+    tufts.push(circle(at(r * 0.45, r * 0.7), 2.6), circle(at(r * 0.75, r * 0.35), 1.8))
+    tufts.push(circle(at(-r * 0.95, -r - 3), 2.2), circle(at(-r * 0.3, -r - 5.5), 2))
+  }
+  if (look.hair === 'wizard') {
+    // wild tufts sticking out all round (attached to the main mass)
+    for (let a = 60; a <= 240; a += 30) {
+      const t = (a * Math.PI) / 180
+      const rr = r + 1.6 + ((a / 30) % 2) * 1.1
+      tufts.push(circle(at(-1.4 + Math.cos(t) * rr, 0.6 + Math.sin(t) * rr), 2 + ((a / 30) % 2) * 0.5))
+    }
+  }
   if (look.hair === 'mop') {
     for (let a = 50; a <= 230; a += 30) {
       const t = (a * Math.PI) / 180
@@ -551,14 +706,16 @@ function drawHead(c: Ctx, neckBase: Vec2, angle: number, face: Face) {
   const curls =
     look.hair === 'mop'
       ? (x: number, y: number) => ((Math.floor(x * 1.5) + Math.floor(y * 1.5)) % 4 === 0 ? HAIR_S : null)
-      : undefined
-  buf.paint(hair, boundsOf([hairC], hairR + 5 + (look.hair === 'beehive' ? r : 0)), HAIR, HAIR_S, 2, curls)
+      : look.hair === 'shaggy' || look.hair === 'wizard'
+        ? (x: number, y: number) => (Math.floor(x * 0.9 + y * 1.7) % 4 === 0 ? HAIR_S : null)
+        : undefined
+  buf.paint(hair, boundsOf([hairC], hairR + 5 + (look.hair === 'beehive' || look.hair === 'shaggy' ? r : 0)), HAIR, HAIR_S, 2, curls)
   if (look.hair === 'beehive') {
     // a thin hair band
     for (let lx = -6; lx <= 3; lx++) buf.dot(at(lx, r + 0.6 - Math.abs(lx + 1.5) * 0.12), ACC)
   }
   if (look.headphones) {
-    const top = at(-1.5, r + (look.hair === 'mop' ? 4.5 : 1.8))
+    const top = at(-1.5, r + (look.hair === 'mop' ? 4.5 : look.hair === 'shaggy' ? 4 : 1.8))
     const cup = at(-3.2, -1)
     buf.paint(capsule(top, cup, 1.3), boundsOf([top, cup], 3), OUT, null, 1, undefined, false)
     buf.paint(circle(cup, 3.4), boundsOf([cup], 5), ACC, OUT, 1)
@@ -702,8 +859,9 @@ function drawTorso(c: Ctx, hip: Vec2, lean: number) {
   ])
   const jacket = look.top === 'jacket'
   const vest = look.top === 'vest'
-  const base = jacket || vest ? JACK : TOP
-  const shade = jacket || vest ? JACK_S : TOP_S
+  const cardigan = look.top === 'cardigan'
+  const base = jacket || vest || cardigan ? JACK : TOP
+  const shade = jacket || vest || cardigan ? JACK_S : TOP_S
 
   const zone = (x: number, y: number, shaded: boolean): number | null => {
     const rel = sub([x, y], hip)
@@ -712,6 +870,13 @@ function drawTorso(c: Ctx, hip: Vec2, lean: number) {
     // a hoodie hangs over the belly, so trousers only show below it
     const inBelly = look.top === 'hoodie' && !!bellyShape && bellyShape(x, y, 0) && q > 0
     if (inBelly && !bellyShape!(x, y, 2) && h < body.torso * 0.3) return TOP_S
+    if (cardigan) {
+      // open knit cardigan over a dark t-shirt: the shirt shows down the front
+      const edge = hw + ((sw - hw) * h) / body.torso
+      if (q > edge - 3.4) return shaded ? TOP_S : TOP
+      if (Math.abs(q - (edge - 3.4)) < 0.6) return JACK_S
+      return null
+    }
     if (h < 3.5 && !inBelly) {
       if (look.skirt) return shaded ? JACK_S : JACK
       if (jacket) return shaded ? JACK_S : JACK
@@ -765,6 +930,7 @@ function renderPoseToCanvas(rawPose: Pose, body: BodyDims, look: Look, palette: 
   const kneeF = drawLeg(c, add(hip, [1, 0]), pose.farLeg, true)
   const kneeN = drawLeg(c, add(hip, [-1, 0]), pose.nearLeg, false)
   if (look.skirt) drawSkirt(c, hip, [kneeN, kneeF])
+  if (look.robe) drawRobe(c, hip, [kneeF, kneeN])
   if (look.top === 'hoodie') {
     const p: Vec2 = [Math.cos(pose.lean * D2R), -Math.sin(pose.lean * D2R)]
     const hood = add(add(neckPt, mul(u, -2)), mul(p, -body.shoulderW * 0.38))
@@ -790,12 +956,17 @@ function renderPoseToCanvas(rawPose: Pose, body: BodyDims, look: Look, palette: 
 
 const cache = new Map<string, HTMLCanvasElement>()
 
-export function spriteFor(pose: Pose, body: BodyDims, look: Look, palette: Palette, charId: string): HTMLCanvasElement {
-  const key = `${charId}|${palette.id}|${JSON.stringify(pose)}`
+/**
+ * A cached sprite. `k` is the resolution: 1 = one design unit per pixel
+ * (portraits, sprite sheet); the fight renders at CHARACTER_SIZE_MULTIPLIER.
+ * The feet origin sits at (SPR_OX * k, SPR_OY * k) in the returned canvas.
+ */
+export function spriteFor(pose: Pose, body: BodyDims, look: Look, palette: Palette, charId: string, k = 1): HTMLCanvasElement {
+  const key = `${charId}|${palette.id}|${k}|${JSON.stringify(pose)}`
   let c = cache.get(key)
   if (!c) {
     if (cache.size > 900) cache.clear()
-    c = renderPoseToCanvas(pose, body, look, palette)
+    c = renderPoseToCanvas(pose, body, look, palette, k)
     cache.set(key, c)
   }
   return c

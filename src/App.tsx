@@ -75,8 +75,14 @@ export default function App() {
             const out = recordWin(p, s.cpu)
             setProgress(out.progress)
             saveProgress(out.progress)
-            setOutcome({ won: true, opponent: s.cpu, unlockedFloor: out.unlockedFloor, becameCeo: out.becameCeo })
-            if (out.unlockedFloor || out.becameCeo) window.setTimeout(() => audio.play('unlock'), 900)
+            setOutcome({
+              won: true,
+              opponent: s.cpu,
+              unlockedFloor: out.unlockedFloor,
+              becameCeo: out.becameCeo,
+              newOpponent: out.newOpponent ? characterById(out.newOpponent).name : undefined,
+            })
+            if (out.unlockedFloor || out.becameCeo || out.newOpponent) window.setTimeout(() => audio.play('unlock'), 900)
           } else setOutcome({ won: false, opponent: s.cpu })
         } else setOutcome(null)
         setResult(r)

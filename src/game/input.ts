@@ -1,3 +1,4 @@
+import { TOUCH_SPECIAL_BUTTON_MEMORY_FRAMES } from './tuning'
 import { noButtons, type Buttons, type InputSnapshot } from './types'
 
 type ButtonName = keyof Buttons
@@ -29,7 +30,7 @@ export class KeyboardInput {
   private readonly onBlur = () => this.clear()
   // kept for a few frames so a tap during recovery still comes out
   private readonly onSpecial = () => {
-    this.special = 20
+    this.special = TOUCH_SPECIAL_BUTTON_MEMORY_FRAMES
   }
   private special = 0
 

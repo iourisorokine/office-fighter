@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { FLOORS, HOME_ROOM, TOP_FLOOR, type Progress } from '../game/campaign'
+import { FLOORS, HOME_ROOM, isAvailable, TOP_FLOOR, type Progress } from '../game/campaign'
 import { characterById } from '../game/characters'
 import { portraitURL } from '../game/render/portraits'
 import { stageById } from '../game/render/stages'
@@ -19,13 +19,14 @@ function startCursor(p: Progress, last: string | null): Cursor {
     if (f && f.level <= p.unlocked) return { level: f.level, i: f.opponents.indexOf(last) }
   }
   const f = FLOORS[p.unlocked - 1]
-  const i = f.opponents.findIndex((id) => !p.beaten.includes(id))
+  const i = f.opponents.findIndex((id) => !p.beaten.includes(id) && isAvailable(p, id))
   return { level: f.level, i: Math.max(0, i) }
 }
 
 /**
  * The main menu: an office tower. Each floor is a level with its own
- * opponents; beat any one of them to open the next floor. The VC is on top.
+ * opponents, who open one at a time; beat anyone on your highest floor to
+ * open the next floor. The VC is on top.
  */
 export function TowerScreen(props: {
   progress: Progress
@@ -45,16 +46,19 @@ export function TowerScreen(props: {
   const floor = FLOORS[cur.level - 1]
   const oppId = floor.opponents[Math.min(cur.i, floor.opponents.length - 1)]
   const opp = characterById(oppId)
-  const locked = cur.level > progress.unlocked
+  const floorLocked = cur.level > progress.unlocked
+  const locked = !isAvailable(progress, oppId)
+  const before = floor.opponents[floor.opponents.indexOf(oppId) - 1]
   const me = props.fighter ? characterById(props.fighter) : null
 
   const pick = (level = cur.level, i = cur.i) => {
-    if (level > progress.unlocked) {
+    const f = FLOORS[level - 1]
+    const id = f.opponents[Math.min(i, f.opponents.length - 1)]
+    if (!isAvailable(progress, id)) {
       props.onDenied()
       return
     }
-    const f = FLOORS[level - 1]
-    props.onPick(f.opponents[Math.min(i, f.opponents.length - 1)])
+    props.onPick(id)
   }
 
   useEffect(() => {
@@ -85,8 +89,10 @@ export function TowerScreen(props: {
     return m
   }, [])
 
-  const status = locked
+  const status = floorLocked
     ? `LOCKED · CLEAR FLOOR ${cur.level - 1} FIRST`
+    : locked
+      ? `LOCKED · BEAT ${before ? characterById(before).name : 'THE OTHERS'} FIRST`
     : cur.level === TOP_FLOOR
       ? progress.ceo
         ? 'YOU ALREADY RUN THIS PLACE'
@@ -123,11 +129,12 @@ export function TowerScreen(props: {
             {f.opponents.map((id, i) => {
               const c = TOWER.cell(f.level, i, f.opponents.length)
               const beaten = progress.beaten.includes(id)
+              const available = isAvailable(progress, id)
               const active = cur.level === f.level && cur.i === i
               return (
                 <button
                   key={id}
-                  className={`tower-cell ${open ? 'open' : 'locked'} ${active ? 'active' : ''} ${beaten ? 'beaten' : ''} ${id === 'vc' ? 'boss' : ''}`}
+                  className={`tower-cell ${available ? 'open' : 'locked'} ${active ? 'active' : ''} ${beaten ? 'beaten' : ''} ${id === 'vc' ? 'boss' : ''}`}
                   style={{ left: px(c.x), top: px(c.y), width: px(c.w), height: px(c.h) }}
                   onMouseEnter={() => setCur({ level: f.level, i })}
                   onFocus={() => setCur({ level: f.level, i })}
@@ -135,10 +142,10 @@ export function TowerScreen(props: {
                     setCur({ level: f.level, i })
                     pick(f.level, i)
                   }}
-                  aria-label={open ? `Fight ${characterById(id).name}` : 'Locked floor'}
+                  aria-label={available ? `Fight ${characterById(id).name}` : 'Locked'}
                 >
                   <img src={portraits[id]} alt="" />
-                  {!open && <span className="cell-lock">?</span>}
+                  {!available && <span className="cell-lock">?</span>}
                   {beaten && <span className="cell-stamp">BEATEN</span>}
                 </button>
               )

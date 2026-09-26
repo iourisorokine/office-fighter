@@ -4,7 +4,7 @@ import { cafeAmbient, createCoworkCafe } from './coworkCafe'
 import { createCubicles } from './cubicles'
 import { fluorescent, type Ctx } from './kit'
 import { createMeetingRoom } from './meeting'
-import { createBlueprintStudio } from './blueprintStudio'
+import { architectAmbient, createArchitectOffice } from './architectOffice'
 import { createServerRoom, serverAmbient } from './serverRoom'
 
 export interface StageDef {
@@ -43,11 +43,11 @@ export const STAGES: StageDef[] = [
     ambient: serverAmbient,
   },
   {
-    id: 'studio',
-    name: 'BLUEPRINT STUDIO',
-    slogans: ['THINK BIGGER'],
-    create: createBlueprintStudio,
-    ambient: () => {},
+    id: 'archoffice',
+    name: "ARCHITECT'S OFFICE",
+    slogans: ['DESIGN FOR SCALE', 'IT DEPENDS'],
+    create: createArchitectOffice,
+    ambient: architectAmbient,
   },
 ]
 

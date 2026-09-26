@@ -1,5 +1,19 @@
 import { CpuController, type Difficulty } from './ai/CpuController'
 import type { Sfx } from './audio'
+import {
+  BLOCK_FREEZE_FRAMES,
+  CHARACTER_SIZE_MULTIPLIER as SIZE,
+  JUMP_OVER_HEIGHT,
+  KNOCKBACK_MULTIPLIER,
+  KO_FREEZE_FRAMES,
+  KO_SLOW_MOTION_FRAMES,
+  MICROSERVICES_COUNT,
+  MICROSERVICES_SPACING_FRAMES,
+  SCREEN_FLASH_ON_BIG_HITS,
+  SPECIAL_FLASH_FRAMES,
+  SPECIAL_FLASH_FREEZE_FRAMES,
+  START_DISTANCE_FROM_CENTER,
+} from './tuning'
 import { PUSH_HALF_W, ROUND_TIME, ROUNDS_TO_WIN, STAGE_LEFT, STAGE_RIGHT, VIEW_W } from './constants'
 import { Fighter, type WorldRect } from './fighter/Fighter'
 import type { KeyboardInput } from './input'
@@ -13,14 +27,10 @@ import {
   RAIN_DURATION,
   spawnBill,
   spawnProjectile,
-  TOWER_END,
-  TOWER_HALF_W,
-  TOWER_HIT,
-  TOWER_LAND,
+  spawnSwarm,
   type Incident,
   type Projectile,
   type Rain,
-  type Tower,
 } from './specials'
 import { emptyInput, type CharacterDef, type HitProps, type InputSnapshot, type MoveDef } from './types'
 
@@ -44,7 +54,6 @@ export interface MatchResult {
 export interface ArenaView {
   projectiles: readonly Projectile[]
   incident: Incident | null
-  towers: readonly Tower[]
 }
 
 export interface Controller {
@@ -70,6 +79,15 @@ export interface Announce {
   color: string
 }
 
+/** The "super flash" when a special starts: dimmed screen, rays, name banner. */
+export interface SpecialFlash {
+  owner: 0 | 1
+  name: string
+  t: number
+  /** show the name banner (the incident has its own big overlay) */
+  banner: boolean
+}
+
 export interface MatchConfig {
   mode: MatchMode
   difficulty: Difficulty
@@ -87,7 +105,9 @@ export interface MatchConfig {
   finalBoss?: boolean
 }
 
-const START_X: [number, number] = [VIEW_W / 2 - 60, VIEW_W / 2 + 60]
+const START_X: [number, number] = [VIEW_W / 2 - START_DISTANCE_FROM_CENTER, VIEW_W / 2 + START_DISTANCE_FROM_CENTER]
+/** text popping up above a fighter's head */
+const ABOVE_HEAD = Math.round(84 * SIZE)
 
 function overlap(a: WorldRect, b: WorldRect) {
   return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
@@ -121,7 +141,6 @@ export class Match implements ArenaView {
   effects: Effect[] = []
   projectiles: Projectile[] = []
   incident: Incident | null = null
-  towers: Tower[] = []
   rain: Rain | null = null
   /** true during the bonus round against the VC */
   bossRound = false
@@ -133,6 +152,10 @@ export class Match implements ArenaView {
   announce: Announce | null = null
   combo: { player: 0 | 1; count: number; t: number } | null = null
   private roundWinner: MatchWinner | null = null
+  /** special move "super flash" in progress */
+  flash: SpecialFlash | null = null
+  /** frames of white screen flash left (heavy hits, KOs) */
+  whiteFlash = 0
   /** sounds to play this frame (the Game drains this; silent in attract mode) */
   sounds: Sfx[] = []
   private lastSerial: [number, number] = [-1, -1]
@@ -148,7 +171,9 @@ export class Match implements ArenaView {
     this.difficulty = cfg.mode === 'attract' ? 'hard' : cfg.difficulty
     this.finalBoss = cfg.mode === 'cpu' && !!cfg.finalBoss
     const [c1, c2] = cfg.chars
-    this.fighters = [new Fighter(c1, 0), new Fighter(c2, c1.id === c2.id ? 1 : 0)]
+    const p1 = new Fighter(c1, 0)
+    // mirror match: other outfit colours, same skin tone
+    this.fighters = [p1, c1.id === c2.id ? new Fighter(c2, 1, p1.palette) : new Fighter(c2, 0)]
     if (cfg.mode === 'attract') {
       this.controllers = [new CpuController('hard', 0), new CpuController('hard', 1)]
       this.names = [c1.name, c2.name]
@@ -169,7 +194,7 @@ export class Match implements ArenaView {
     const pool = this.rotatePool.filter((c) => c.id !== p1.char.id && c.id !== old.char.id)
     if (pool.length === 0) return
     const next = pool[Math.floor(Math.random() * pool.length)]
-    this.fighters[1] = new Fighter(next, next.id === p1.char.id ? 1 : 0)
+    this.fighters[1] = next.id === p1.char.id ? new Fighter(next, 1, p1.palette) : new Fighter(next, 0)
     this.controllers[1] = new CpuController(this.difficulty, 1)
     this.names[1] = this.mode === 'cpu' ? `${next.name} CPU` : next.name
   }
@@ -183,9 +208,10 @@ export class Match implements ArenaView {
     this.effects = []
     this.projectiles = []
     this.incident = null
-    this.towers = []
     this.rain = null
     this.combo = null
+    this.flash = null
+    this.whiteFlash = 0
     this.roundWinner = null
     this.setPhase('intro')
   }
@@ -201,6 +227,9 @@ export class Match implements ArenaView {
 
   update() {
     if (this.announce && ++this.announce.t >= this.announce.dur) this.announce = null
+    // the super flash keeps animating through its own freeze
+    if (this.flash && ++this.flash.t >= SPECIAL_FLASH_FRAMES) this.flash = null
+    if (this.whiteFlash > 0) this.whiteFlash--
     if (this.shake > 0) this.shake--
     if (this.hitstop > 0) {
       this.hitstop--
@@ -235,18 +264,16 @@ export class Match implements ArenaView {
       this.resolveHits()
       this.updateProjectiles()
       this.updateIncident()
-      this.updateTowers()
       this.updateRain()
     } else {
       this.projectiles = []
       this.incident = null
-      this.towers = []
       this.rain = null
     }
     // the VC can't stop throwing money around
     for (const f of this.fighters) {
       if (f.char.look.prop === 'cash' && this.phaseT % 22 === 0 && f.health > 0) {
-        this.effects.push(spawnEffect('cash', f.x + f.facing * 14, f.y + 44))
+        this.effects.push(spawnEffect('cash', f.x + f.facing * 14 * SIZE, f.y + 44 * SIZE))
       }
     }
     this.effects = updateEffects(this.effects)
@@ -260,19 +287,20 @@ export class Match implements ArenaView {
     this.fighters.forEach((f, i) => {
       for (const ev of f.events) {
         if (ev.type === 'dust' || ev.type === 'land') {
-          this.effects.push(spawnEffect('dust', ev.x, 0))
+          this.effects.push(spawnEffect(ev.type === 'dust' ? 'shock' : 'dust', ev.x, 0))
           if (ev.type === 'land') this.sounds.push('land')
         } else if (ev.type === 'special') {
           this.sounds.push('special')
-          if (f.char.special.move.spawn?.kind !== 'incident') this.effects.push(spawnText(`${ev.name.toUpperCase()}!`, f.x, f.y + 84, '#ffffff', 50))
+          const banner = f.char.special.move.spawn?.kind !== 'incident'
+          this.flash = { owner: i as 0 | 1, name: ev.name.toUpperCase(), t: 0, banner }
+          this.hitstop = Math.max(this.hitstop, SPECIAL_FLASH_FREEZE_FRAMES)
         } else if (ev.type === 'spawn' && this.phase === 'fight') {
-          const opp = this.fighters[1 - i]
           if (ev.kind === 'incident') {
             this.incident = { owner: i as 0 | 1, t: 0, fired: false }
             this.sounds.push('alarm')
-          } else if (ev.kind === 'tower') {
-            this.towers.push({ owner: i as 0 | 1, x: opp.x, t: 0, fired: false })
-            this.sounds.push('whistle')
+          } else if (ev.kind === 'swarm') {
+            this.projectiles.push(...spawnSwarm(i as 0 | 1, f, MICROSERVICES_COUNT, MICROSERVICES_SPACING_FRAMES))
+            this.sounds.push('shoot')
           } else if (ev.kind === 'raise') {
             this.rain = { owner: i as 0 | 1, t: 0 }
             this.say('RAISE!', 70, 5, '#5fe08a', 'MAKE IT RAIN')
@@ -421,9 +449,9 @@ export class Match implements ArenaView {
     const [a, b] = this.fighters
     const ghost = (f: Fighter) => f.state === 'down' || f.state === 'ko' || f.state === 'knockdown'
     if (ghost(a) || ghost(b)) return
-    if (Math.abs(a.y - b.y) > 40) return
+    if (Math.abs(a.y - b.y) > JUMP_OVER_HEIGHT * SIZE) return
     const dx = b.x - a.x
-    const minDist = Math.max(PUSH_HALF_W, a.char.hurtHalfW - 1) + Math.max(PUSH_HALF_W, b.char.hurtHalfW - 1)
+    const minDist = (Math.max(PUSH_HALF_W, a.char.hurtHalfW - 1) + Math.max(PUSH_HALF_W, b.char.hurtHalfW - 1)) * SIZE
     const ov = minDist - Math.abs(dx)
     if (ov <= 0) return
     const dir = dx === 0 ? a.facing : Math.sign(dx)
@@ -451,6 +479,7 @@ export class Match implements ArenaView {
     }
     for (const [att, def, move, hb, hurt] of hits) {
       att.moveHit = true
+      if (att.char.look.prop === 'duck') this.sounds.push('squeak')
       const cx = (Math.max(hb.x0, hurt.x0) + Math.min(hb.x1, hurt.x1)) / 2
       const cy = (Math.max(hb.y0, hurt.y0) + Math.min(hb.y1, hurt.y1)) / 2
       this.applyHit(att, def, move, att.x, att.facing, cx, cy, !att.airborne)
@@ -479,7 +508,7 @@ export class Match implements ArenaView {
     if (blocked) {
       this.sounds.push('block')
       def.block(hit, srcX, srcFacing)
-      this.hitstop = Math.max(this.hitstop, 6)
+      this.hitstop = Math.max(this.hitstop, BLOCK_FREEZE_FRAMES)
       this.effects.push(spawnEffect('block', cx, cy))
     } else {
       def.takeHit(hit, srcX, srcFacing)
@@ -487,16 +516,19 @@ export class Match implements ArenaView {
       this.hitstop = Math.max(this.hitstop, hit.hitstop)
       this.victim = def
       this.effects.push(spawnEffect(hit.heavy ? 'heavy' : 'hit', cx, cy))
-      if (hit.heavy) this.shake = Math.max(this.shake, 8)
+      if (hit.heavy) {
+        this.shake = Math.max(this.shake, 10)
+        if (SCREEN_FLASH_ON_BIG_HITS) this.whiteFlash = Math.max(this.whiteFlash, 2)
+      }
       this.trailDelay[this.fighters.indexOf(def)] = 30
       if (def.comboCount >= 2) this.combo = { player: this.fighters.indexOf(att) as 0 | 1, count: def.comboCount, t: 70 }
       if (cancelsIncident) {
         this.incident = null
-        this.effects.push(spawnText('INCIDENT RESOLVED', def.x, def.y + 80, '#5fe08a'))
+        this.effects.push(spawnText('INCIDENT RESOLVED', def.x, def.y + ABOVE_HEAD, '#5fe08a'))
       }
     }
     // cornered defender: the attacker gets pushed back instead
-    if (cornerPush && def.atWall()) att.vx = -pushDir * push * 0.9
+    if (cornerPush && def.atWall()) att.vx = -pushDir * push * 0.9 * KNOCKBACK_MULTIPLIER
 
     if (def.health <= 0) this.knockOut(att)
     return !blocked
@@ -512,6 +544,7 @@ export class Match implements ArenaView {
         const p = list[i]
         const q = list[j]
         if (p.dead || q.dead || p.owner === q.owner || p.kind === 'bill' || q.kind === 'bill') continue
+        if ((p.delay ?? 0) > 0 || (q.delay ?? 0) > 0) continue
         if (!overlap(projectileRect(p), projectileRect(q))) continue
         const pBig = p.kind === 'bullshit'
         const qBig = q.kind === 'bullshit'
@@ -522,7 +555,7 @@ export class Match implements ArenaView {
     }
 
     for (const p of list) {
-      if (p.dead) continue
+      if (p.dead || (p.delay ?? 0) > 0) continue
       const owner = this.fighters[p.owner]
       const def = this.fighters[1 - p.owner]
       const r = projectileRect(p)
@@ -539,18 +572,18 @@ export class Match implements ArenaView {
         def.sticker = 90
         def.stickerKind = 'ticket'
         def.slowed = 180
-        this.effects.push(spawnText('SCOPE CREEP!', def.x, def.y + 84, '#ffe135'))
+        this.effects.push(spawnText('SCOPE CREEP!', def.x, def.y + ABOVE_HEAD, '#ffe135'))
       }
       if (p.kind === 'complaint') {
         this.effects.push(spawnEffect('paper', cx, cy))
         if (landed) {
           def.stickerKind = 'complaint'
           def.sticker = 70
-          this.effects.push(spawnText('COMPLAINT FILED!', def.x, def.y + 84, '#ff4a2a'))
+          this.effects.push(spawnText('COMPLAINT FILED!', def.x, def.y + ABOVE_HEAD, '#ff4a2a'))
         }
       }
       if (p.kind === 'bullshit') {
-        this.effects.push(spawnEffect('dust', def.x, 0), spawnText('BLAH BLAH BLAH!', def.x, def.y + 84, '#e0c070'))
+        this.effects.push(spawnEffect('dust', def.x, 0), spawnText('BLAH BLAH BLAH!', def.x, def.y + ABOVE_HEAD, '#e0c070'))
       }
     }
     this.projectiles = list.filter((p) => !p.dead)
@@ -567,40 +600,20 @@ export class Match implements ArenaView {
       this.incident = null
       return
     }
+    if (!inc.fired) this.shake = Math.max(this.shake, 2)
     if (inc.t === INCIDENT_WARNING) {
       inc.fired = true
-      this.shake = Math.max(this.shake, 14)
+      this.shake = Math.max(this.shake, 16)
+      if (SCREEN_FLASH_ON_BIG_HITS) this.whiteFlash = 3
       if (target.airborne || target.hurtboxesWorld().length === 0) {
-        this.effects.push(spawnText('DODGED!', target.x, target.y + 84, '#5fe08a'))
+        this.effects.push(spawnText('DODGED!', target.x, target.y + ABOVE_HEAD, '#5fe08a'))
       } else {
         const [hx, hy] = target.headPos()
-        this.effects.push(spawnText('SEV-1 OUTAGE!', target.x, target.y + 90, '#ff4a2a'))
+        this.effects.push(spawnText('SEV-1 OUTAGE!', target.x, target.y + ABOVE_HEAD + 6, '#ff4a2a'))
         this.applyHit(owner, target, INCIDENT_HIT, owner.x, owner.facing, hx, hy, false)
       }
     }
     if (inc.t >= INCIDENT_END) this.incident = null
-  }
-
-  private updateTowers() {
-    for (const tw of this.towers) {
-      tw.t++
-      if (tw.t !== TOWER_LAND) continue
-      tw.fired = true
-      this.shake = Math.max(this.shake, 12)
-      this.sounds.push('crash')
-      this.effects.push(spawnEffect('dust', tw.x - 10, 0), spawnEffect('dust', tw.x + 10, 0))
-      const owner = this.fighters[tw.owner]
-      const target = this.fighters[1 - tw.owner]
-      const under = Math.abs(target.x - tw.x) < TOWER_HALF_W + target.char.hurtHalfW && target.y < 50
-      if (under && target.hurtboxesWorld().length > 0) {
-        const [hx, hy] = target.headPos()
-        this.effects.push(spawnText('OVER-ENGINEERED!', target.x, target.y + 90, '#ff4a2a'))
-        this.applyHit(owner, target, TOWER_HIT, tw.x, owner.facing, hx, hy, false)
-      } else {
-        this.effects.push(spawnText('MISSED THE DEADLINE', tw.x, 70, '#9fd0f0'))
-      }
-    }
-    this.towers = this.towers.filter((tw) => tw.t < TOWER_END)
   }
 
   private updateRain() {
@@ -617,11 +630,17 @@ export class Match implements ArenaView {
 
   private knockOut(att: Fighter) {
     const [a, b] = this.fighters
-    this.hitstop = 36
-    this.slow = 70
+    this.hitstop = KO_FREEZE_FRAMES
+    this.slow = KO_SLOW_MOTION_FRAMES
     this.shake = 16
     this.projectiles = []
     this.sounds.push('ko')
+    const victim = this.fighters.find((f) => f.health <= 0)
+    if (victim) {
+      const [hx, hy] = victim.headPos()
+      this.effects.push(spawnEffect('ko', hx, hy - 10), spawnEffect('shock', victim.x, 0))
+    }
+    if (SCREEN_FLASH_ON_BIG_HITS) this.whiteFlash = 6
     const both = a.health <= 0 && b.health <= 0
     this.roundWinner = both ? -1 : (this.fighters.indexOf(att) as 0 | 1)
     if (both) this.say('DOUBLE K.O.', 150, 4, '#ff4a2a', 'EVERYONE IS FIRED')

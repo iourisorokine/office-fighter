@@ -55,6 +55,8 @@ export interface TowerOutcome {
   opponent: string
   unlockedFloor?: number
   becameCeo?: boolean
+  /** name of the opponent this win made available on the same floor */
+  newOpponent?: string
 }
 
 export function ResultOverlay(props: {
@@ -80,8 +82,13 @@ export function ResultOverlay(props: {
   if (bonus === 'won') line = 'YOU BEAT THE VC. SERIES A CLOSED.'
   else if (bonus === 'lost') line = "THE VC PASSED... BUT YOU'RE STILL PROMOTED."
   else if (t?.becameCeo) line = 'THE WHOLE TOWER IS YOURS NOW.'
-  else if (t?.unlockedFloor)
-    line = t.unlockedFloor === props.topFloor ? 'TOP FLOOR UNLOCKED! THE VC IS WAITING.' : `FLOOR ${t.unlockedFloor} UNLOCKED!`
+  else if (t?.unlockedFloor || t?.newOpponent) {
+    const parts: string[] = []
+    if (t.newOpponent) parts.push(`NEW CHALLENGER: ${t.newOpponent}`)
+    if (t.unlockedFloor)
+      parts.push(t.unlockedFloor === props.topFloor ? 'TOP FLOOR UNLOCKED! THE VC IS WAITING.' : `FLOOR ${t.unlockedFloor} UNLOCKED!`)
+    line = parts.join(' · ')
+  }
   else if (t && !t.won) line = 'RETRY, OR PICK SOMEONE ELSE ON THIS FLOOR.'
   return (
     <div className="overlay dim">
@@ -90,7 +97,7 @@ export function ResultOverlay(props: {
         <p className="score">
           {wins[0]} - {wins[1]}
         </p>
-        {line && <p className={`bonus-line ${t?.unlockedFloor || funded ? 'unlock' : ''}`}>{line}</p>}
+        {line && <p className={`bonus-line ${t?.unlockedFloor || t?.newOpponent || funded ? 'unlock' : ''}`}>{line}</p>}
         {t ? (
           t.won ? (
             <>

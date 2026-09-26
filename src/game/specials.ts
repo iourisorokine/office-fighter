@@ -1,14 +1,23 @@
 import { VIEW_W } from './constants'
 import type { Fighter } from './fighter/Fighter'
 import type { HitProps, SpawnKind } from './types'
+import {
+  CHARACTER_SIZE_MULTIPLIER as SIZE,
+  INCIDENT_TOTAL_FRAMES,
+  INCIDENT_WARNING_FRAMES,
+  MONEY_RAIN_FRAMES,
+  PROJECTILE_SIZE_MULTIPLIER as PSIZE,
+  PROJECTILE_SPEED_MULTIPLIER,
+  MICROSERVICES_WAVE_HEIGHT,
+} from './tuning'
 
 /**
  * Special-move objects that live outside the fighters: projectiles
- * (coffee cup, formal complaint, mega bullshit, new requirement, cash),
- * and area effects (SEV-1 incident, ivory tower, the VC's raise).
+ * (coffee cup, formal complaint, mega bullshit, new requirement, cash,
+ * the architect's microservices), and area effects (SEV-1 incident, the VC's raise).
  */
 
-export type ProjectileKind = Exclude<SpawnKind, 'incident' | 'tower' | 'raise'> | 'bill'
+export type ProjectileKind = Exclude<SpawnKind, 'incident' | 'swarm' | 'raise'> | 'bill' | 'service'
 
 export interface Projectile {
   id: number
@@ -20,6 +29,11 @@ export interface Projectile {
   vx: number
   /** only falling bills move vertically */
   vy: number
+  /** microservices: height they weave around, and their wave phase */
+  baseY?: number
+  phase?: number
+  /** frames to wait (invisible, not moving) before flying */
+  delay?: number
   w: number
   h: number
   t: number
@@ -79,6 +93,14 @@ export const PROJECTILES: Record<ProjectileKind, ProjectileDef> = {
     at: [28, 50],
     hit: { damage: 10, hitstun: 22, blockstun: 14, pushHit: 3, pushBlock: 3.5, hitstop: 10, level: 'mid', chip: 2 },
   },
+  service: {
+    speed: 3.3,
+    w: 9,
+    h: 8,
+    life: 170,
+    at: [18, 46],
+    hit: { damage: 3, hitstun: 11, blockstun: 7, pushHit: 0.7, pushBlock: 0.9, hitstop: 3, level: 'mid', chip: 1 },
+  },
   bullshit: {
     speed: 2.4,
     w: 40,
@@ -109,12 +131,13 @@ export function spawnProjectile(kind: ProjectileKind, owner: 0 | 1, f: Fighter):
     id: nextId++,
     owner,
     kind,
-    x: f.x + f.facing * d.at[0],
-    y: f.y + d.at[1],
-    vx: f.facing * d.speed,
+    // spawn offsets are at size 1: they grow with the fighter
+    x: f.x + f.facing * d.at[0] * SIZE,
+    y: f.y + d.at[1] * SIZE,
+    vx: f.facing * d.speed * PROJECTILE_SPEED_MULTIPLIER,
     vy: 0,
-    w: kind === 'bullshit' ? 16 : d.w,
-    h: kind === 'bullshit' ? 24 : d.h,
+    w: (kind === 'bullshit' ? 16 : d.w) * PSIZE,
+    h: (kind === 'bullshit' ? 24 : d.h) * PSIZE,
     t: 0,
     life: d.life,
     hit: d.hit,
@@ -142,9 +165,29 @@ export function spawnBill(owner: 0 | 1, x: number): Projectile {
   }
 }
 
+/** The architect's special: a wave of little service boxes, leaving one after another. */
+export function spawnSwarm(owner: 0 | 1, f: Fighter, count: number, spacing: number): Projectile[] {
+  const out: Projectile[] = []
+  for (let i = 0; i < count; i++) {
+    const p = spawnProjectile('service', owner, f)
+    p.baseY = p.y + (i % 2 ? 6 : -4)
+    p.phase = i * 1.3
+    p.delay = i * spacing
+    out.push(p)
+  }
+  return out
+}
+
 export function moveProjectile(p: Projectile) {
+  if (p.delay && p.delay > 0) {
+    p.delay--
+    return
+  }
   p.t++
   p.x += p.vx
+  if (p.kind === 'service' && p.baseY !== undefined) {
+    p.y = p.baseY + Math.sin(p.t * 0.16 + (p.phase ?? 0)) * MICROSERVICES_WAVE_HEIGHT
+  }
   if (p.kind === 'bill') {
     p.y += p.vy
     p.x += Math.sin(p.t * 0.2) * 0.6
@@ -153,8 +196,8 @@ export function moveProjectile(p: Projectile) {
   if (p.kind === 'bullshit') {
     // the cloud swells as it travels
     const k = Math.min(1, p.t / 18)
-    p.w = 16 + (PROJECTILES.bullshit.w - 16) * k
-    p.h = 24 + (PROJECTILES.bullshit.h - 24) * k
+    p.w = (16 + (PROJECTILES.bullshit.w - 16) * k) * PSIZE
+    p.h = (24 + (PROJECTILES.bullshit.h - 24) * k) * PSIZE
     p.y = Math.max(p.h / 2, p.y)
   }
   if (p.t > p.life || p.x < -60 || p.x > VIEW_W + 60) p.dead = true
@@ -171,8 +214,8 @@ export interface Incident {
   fired: boolean
 }
 
-export const INCIDENT_WARNING = 45
-export const INCIDENT_END = 90
+export const INCIDENT_WARNING = INCIDENT_WARNING_FRAMES
+export const INCIDENT_END = INCIDENT_TOTAL_FRAMES
 
 export const INCIDENT_HIT: HitProps = {
   damage: 20,
@@ -185,35 +228,10 @@ export const INCIDENT_HIT: HitProps = {
   heavy: true,
 }
 
-/** The Architect's special: a shadow marks the spot, then a stack of diagram boxes lands there. */
-export interface Tower {
-  owner: 0 | 1
-  x: number
-  t: number
-  fired: boolean
-}
-
-export const TOWER_LAND = 50
-export const TOWER_END = 85
-export const TOWER_HALF_W = 20
-
-export const TOWER_HIT: HitProps = {
-  damage: 16,
-  hitstun: 0,
-  blockstun: 0,
-  pushHit: 0,
-  pushBlock: 0,
-  hitstop: 12,
-  level: 'unblockable',
-  heavy: true,
-  knockdown: true,
-  launch: [1.2, 3],
-}
-
 /** The VC's special: it rains money for a while. */
 export interface Rain {
   owner: 0 | 1
   t: number
 }
 
-export const RAIN_DURATION = 120
+export const RAIN_DURATION = MONEY_RAIN_FRAMES
